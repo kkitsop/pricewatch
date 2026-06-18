@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1117">
+<title>PriceWatch GR</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+
+<style>
+/* ── Reset & Tokens ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:       #0f1117;
+  --surface:  #1a1d27;
+  --surface2: #222535;
+  --border:   #2a2d3a;
+  --text:     #e8eaf0;
+  --muted:    #6b7280;
+  --accent:   #22c55e;
+  --offer:    #f59e0b;
+  --danger:   #ef4444;
+  --ab:       #e3001b;
+  --skl:      #004990;
+  --lidl:     #0050aa;
+  --mym:      #e67e22;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+  --mono:     'JetBrains Mono', monospace;
+  --sans:     'Inter', -apple-system, sans-serif;
+  --nav-h:    60px;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout shell ────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-top: var(--safe-top);
+}
+
+/* ── Top bar ─────────────────────────────────────────────────── */
+.topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.topbar-logo {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+  line-height: 1;
+}
+.topbar-logo span { color: var(--text); }
+
+.topbar-right { display: flex; gap: 10px; align-items: center; }
+
+.icon-btn {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  transition: color .15s, background .15s;
+}
+.icon-btn:active { background: var(--surface2); color: var(--text); }
+.icon-btn.active { color: var(--accent); border-color: var(--accent); }
+
+/* ── Page views ──────────────────────────────────────────────── */
+.pages {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.page {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: none;
+  overscroll-behavior: contain;
+}
+.page.active { display: block; }
+
+/* ── Bottom nav ──────────────────────────────────────────────── */
+.bottom-nav {
+  flex-shrink: 0;
+  height: calc(var(--nav-h) + var(--safe-bot));
+  padding-bottom: var(--safe-bot);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: color .15s;
+  padding-bottom: 2px;
+}
+.nav-item svg { width: 22px; height: 22px; }
+.nav-item.active { color: var(--accent); }
+
+/* ── Search page ─────────────────────────────────────────────── */
+.search-header {
+  padding: 14px 16px 10px;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  transition: border-color .2s;
+}
+.search-box:focus-within { border-color: var(--accent); }
+.search-box svg { color: var(--muted); flex-shrink: 0; }
+
+.search-box input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: var(--sans);
+}
+.search-box input::placeholder { color: var(--muted); }
+
+.filter-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-row::-webkit-scrollbar { display: none; }
+
+.pill {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+  font-family: var(--sans);
+}
+.pill.active               { color: #000; border-color: transparent; background: var(--accent); }
+.pill[data-chain="ab"].active       { background: var(--ab); color: #fff; }
+.pill[data-chain="sklavenitis"].active { background: var(--skl); color: #fff; }
+.pill[data-chain="lidl"].active     { background: var(--lidl); color: #fff; }
+.pill[data-chain="mymarket"].active { background: var(--mym); color: #fff; }
+
+/* ── Category chips ──────────────────────────────────────────── */
+.cat-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.cat-row::-webkit-scrollbar { display: none; }
+
+.cat-chip {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: all .15s;
+}
+.cat-chip.active { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+
+/* ── Product list (mobile cards) ─────────────────────────────── */
+.product-list {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform .1s;
+  cursor: pointer;
+}
+.pcard:active { transform: scale(0.985); }
+
+.pcard-top {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.pcard-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--surface2);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  overflow: hidden;
+}
+.pcard-img img { width: 100%; height: 100%; object-fit: contain; }
+
+.pcard-info { flex: 1; min-width: 0; }
+
+.pcard-chain-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.chain-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.chain-ab .chain-dot        { background: var(--ab); }
+.chain-sklavenitis .chain-dot { background: var(--skl); }
+.chain-lidl .chain-dot      { background: var(--lidl); }
+.chain-mymarket .chain-dot  { background: var(--mym); }
+
+.chain-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+}
+
+.offer-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--offer);
+  color: #000;
+  padding: 1px 7px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.pcard-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: 2px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pcard-brand {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.pcard-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pcard-price {
+  font-family: var(--mono);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.pcard-was {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.pcard-ppu {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ── Compare strip (bottom of search) ───────────────────────── */
+.compare-strip {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 2px solid var(--accent);
+  padding: 10px 14px;
+  display: none;
+  gap: 10px;
+  align-items: center;
+  z-index: 20;
+}
+.compare-strip.visible { display: flex; }
+
+.compare-strip-items {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.compare-strip-items::-webkit-scrollbar { display: none; }
+
+.cstrip-chip {
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+  max-width: 140px;
+}
+.cstrip-chip span { overflow: hidden; text-overflow: ellipsis; }
+.cstrip-rm { cursor: pointer; color: var(--muted); font-size: 1rem; flex-shrink: 0; }
+.cstrip-rm:active { color: var(--danger); }
+
+.btn-go-compare {
+  flex-shrink: 0;
+  padding: 9px 16px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+
+/* ── Offers page ─────────────────────────────────────────────── */
+.offers-header {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.offers-header h2 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.offers-header p { font-size: 0.8rem; color: var(--muted); }
+
+.offers-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px;
+}
+
+.ocard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform .1s;
+}
+.ocard:active { transform: scale(0.97); }
+
+.ocard-img {
+  height: 90px;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+}
+
+.ocard-body { padding: 10px; }
+
+.ocard-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ocard-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.ocard-price { font-family: var(--mono); font-size: 1rem; font-weight: 700; color: var(--accent); }
+.ocard-was { font-family: var(--mono); font-size: 0.72rem; text-decoration: line-through; color: var(--muted); }
+
+.ocard-save {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(245,158,11,0.15);
+  color: var(--offer);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.ocard-chain-bar { height: 3px; }
+.chain-ab .ocard-chain-bar        { background: var(--ab); }
+.chain-sklavenitis .ocard-chain-bar { background: var(--skl); }
+.chain-lidl .ocard-chain-bar      { background: var(--lidl); }
+.chain-mymarket .ocard-chain-bar  { background: var(--mym); }
+
+/* ── Compare page ────────────────────────────────────────────── */
+.compare-page-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.compare-page-header h2 { font-size: 1rem; font-weight: 700; }
+
+.compare-hint {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+}
+.compare-hint h3 { color: var(--text); margin-bottom: 8px; }
+.compare-hint p { font-size: 0.85rem; line-height: 1.5; }
+
+.compare-content { padding: 12px; }
+
+/* Product name header για compare */
+.cmp-product-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 12px 0 4px;
+  color: var(--text);
+}
+.cmp-product-sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 12px; }
+
+/* Price comparison cards */
+.cmp-prices-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.cmp-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+.cmp-card.cheapest {
+  border-color: var(--accent);
+  background: rgba(34,197,94,0.06);
+}
+
+.cmp-card-chain {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+  letter-spacing: 0.4px;
+}
+.cmp-card-price {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.cmp-card.cheapest .cmp-card-price { color: var(--accent); }
+.cmp-card-diff {
+  font-size: 0.72rem;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.cmp-card.cheapest .cmp-card-diff { color: var(--accent); font-weight: 600; }
+.cmp-card-offer {
+  font-size: 0.65rem;
+  background: rgba(245,158,11,0.15);
+  color: var(--offer);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+/* Chart section */
+.chart-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.chart-section h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.chart-wrap { height: 180px; position: relative; }
+
+/* ── History page ────────────────────────────────────────────── */
+.history-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.history-header h2 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.history-header p  { font-size: 0.78rem; color: var(--muted); }
+
+.history-list { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.hist-item:active { opacity: 0.8; }
+
+.hist-icon {
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.hist-info { flex: 1; min-width: 0; }
+.hist-name { font-size: 0.85rem; font-weight: 600; margin-bottom: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-meta { font-size: 0.72rem; color: var(--muted); }
+
+.hist-price {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Bottom sheet / drawer ───────────────────────────────────── */
+.sheet-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  align-items: flex-end;
+}
+.sheet-overlay.open { display: flex; }
+
+.sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding-bottom: var(--safe-bot);
+  animation: slideUp .25s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(60px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.sheet-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 12px auto 8px;
+}
+
+.sheet-header {
+  padding: 8px 16px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sheet-title { font-size: 1rem; font-weight: 700; }
+.sheet-chain-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.sheet-chain-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+  color: white;
+}
+
+.sheet-body { padding: 16px; }
+
+.sheet-price-big {
+  font-family: var(--mono);
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.sheet-price-was {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.sheet-ppu {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+  margin-bottom: 20px;
+}
+
+.sheet-chart-wrap { height: 160px; position: relative; margin-bottom: 20px; }
+
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+}
+.btn-add-compare {
+  flex: 1;
+  padding: 13px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.btn-open-url {
+  padding: 13px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: var(--sans);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Loading ─────────────────────────────────────────────────── */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 200px;
+  color: var(--muted);
+}
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Stats summary strip ─────────────────────────────────────── */
+.stats-strip {
+  display: flex;
+  padding: 10px 16px;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stats-strip::-webkit-scrollbar { display: none; }
+
+.stat-item strong {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+/* ── Empty states ────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 50px 20px;
+  color: var(--muted);
+}
+.empty-state .e-icon { font-size: 3rem; margin-bottom: 12px; }
+.empty-state h3 { color: var(--text); font-size: 1rem; margin-bottom: 6px; }
+.empty-state p  { font-size: 0.82rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-logo">Price<span>Watch</span></div>
+    <div class="topbar-right">
+      <div class="icon-btn" id="btnNotif" title="Ειδοποιήσεις">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+      </div>
+      <div class="icon-btn" id="btnInstall" title="Εγκατάσταση" style="display:none">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pages -->
+  <div class="pages">
+
+    <!-- ── PAGE: Search ─────────────────────────────── -->
+    <div class="page active" id="page-search">
+      <div class="search-header">
+        <div class="search-box">
+          <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input type="search" id="searchInput" placeholder="Αναζήτηση... (π.χ. γάλα, καφές)">
+        </div>
+        <div class="filter-row" id="chainPills">
+          <button class="pill active" data-chain="all">Όλα</button>
+          <button class="pill" data-chain="ab">ΑΒ Βασιλόπουλος</button>
+          <button class="pill" data-chain="sklavenitis">Σκλαβενίτης</button>
+          <button class="pill" data-chain="lidl">Lidl</button>
+          <button class="pill" data-chain="mymarket">My Market</button>
+        </div>
+      </div>
+
+      <div class="cat-row" id="catRow"></div>
+
+      <div class="stats-strip">
+        <div class="stat-item"><strong id="sTotal">—</strong> αποτελέσματα</div>
+        <div class="stat-item"><strong id="sOffers">—</strong> προσφορές</div>
+        <div class="stat-item">Ενημ. <strong id="sTime">—</strong></div>
+      </div>
+
+      <div class="product-list" id="productList">
+        <div class="loading-screen">
+          <div class="spinner"></div>
+          <span>Φόρτωση τιμών...</span>
+        </div>
+      </div>
+
+      <!-- Compare strip -->
+      <div class="compare-strip" id="compareStrip">
+        <div class="compare-strip-items" id="compareStripItems"></div>
+        <button class="btn-go-compare" id="btnGoCompare">Σύγκριση</button>
+      </div>
+    </div>
+
+    <!-- ── PAGE: Offers ─────────────────────────────── -->
+    <div class="page" id="page-offers">
+      <div class="offers-header">
+        <h2>🏷️ Προσφορές</h2>
+        <p id="offersCount">Φόρτωση...</p>
+      </div>
+      <div class="offers-grid" id="offersGrid">
+        <div class="loading-screen" style="grid-column:1/-1">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE: Compare ────────────────────────────── -->
+    <div class="page" id="page-compare">
+      <div class="compare-page-header">
+        <h2>⚖️ Σύγκριση</h2>
+      </div>
+      <div id="comparePageContent">
+        <div class="compare-hint">
+          <div style="font-size:3rem;margin-bottom:12px">⚖️</div>
+          <h3>Κανένα προϊόν</h3>
+          <p>Πήγαινε στην Αναζήτηση,<br>πάτησε σε προϊόντα για να τα προσθέσεις εδώ.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE: History ────────────────────────────── -->
+    <div class="page" id="page-history">
+      <div class="history-header">
+        <h2>📈 Ιστορικό Τιμών</h2>
+        <p>Παρακολούθηση τάσεων ανά προϊόν</p>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="empty-state">
+          <div class="e-icon">📈</div>
+          <h3>Δεν έχετε δει κανένα προϊόν ακόμα</h3>
+          <p>Πατήστε σε ένα προϊόν για να δείτε το ιστορικό τιμών του.</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /pages -->
+
+  <!-- Bottom nav -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" data-page="search">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      Αναζήτηση
+    </div>
+    <div class="nav-item" data-page="offers">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+      Προσφορές
+    </div>
+    <div class="nav-item" data-page="compare">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      Σύγκριση
+    </div>
+    <div class="nav-item" data-page="history">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      Ιστορικό
+    </div>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- ── Product detail bottom sheet ───────────────────────────── -->
+<div class="sheet-overlay" id="sheetOverlay">
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header" id="sheetHeader"></div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════
+const state = {
+  products:    [],
+  filtered:    [],
+  compareList: [],
+  viewedHistory: JSON.parse(localStorage.getItem('pw_history') || '[]'),
+  activeChain: 'all',
+  activeCat:   '',
+  searchQ:     '',
+  currentPage: 'search',
+};
+
+const CHAIN_LABELS = { ab:'ΑΒ', sklavenitis:'Σκλαβενίτης', lidl:'Lidl', mymarket:'My Market' };
+const CAT_LABELS = {
+  galaktokomika:'Γαλακτοκομικά', artopoiimata:'Αρτοποιήματα',
+  kafes:'Καφές', anapsyktika:'Αναψυκτικά', konserves:'Κονσέρβες',
+  katharistika:'Καθαριστικά', prosopikhfrontida:'Φροντίδα',
+  katepsygmena:'Κατεψυγμένα', allantika:'Αλλαντικά',
+};
+const CAT_EMOJI = {
+  galaktokomika:'🥛', artopoiimata:'🍞', kafes:'☕', anapsyktika:'🥤',
+  konserves:'🥫', katharistika:'🧼', prosopikhfrontida:'🧴',
+  katepsygmena:'🧊', allantika:'🥩',
+};
+
+// ════════════════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════════════════
+async function loadData() {
+  try {
+    const r = await fetch('data/prices.json');
+    if (!r.ok) throw new Error();
+    state.products = await r.json();
+  } catch {
+    state.products = generateDemoData();
+  }
+  initUI();
+}
+
+function generateDemoData() {
+  const chains = ['ab','sklavenitis','lidl','mymarket'];
+  const items = [
+    ['Γάλα Φρέσκο Πλήρες 3.5%','ΔΕΛΤΑ','galaktokomika','🥛',1,'lt'],
+    ['Γάλα ΕΛΤ Πλήρες','ΜΕΒΓΑΛ','galaktokomika','🥛',1,'lt'],
+    ['Γιαούρτι Στραγγιστό 2%','OLYMPUS','galaktokomika','🥛',0.5,'kg'],
+    ['Τυρί Φέτα ΠΟΠ','ΔΩΔΩΝΗ','galaktokomika','🧀',0.4,'kg'],
+    ['Αυγά Ελεύθερης Βοσκής 6τεμ','ΒΙΟΑΥΓΟ','galaktokomika','🥚',6,'τεμ'],
+    ['Ψωμί Τοστ 500g','HARRY\'S','artopoiimata','🍞',500,'g'],
+    ['Σπαγγέτι Νο7 500g','BARILLA','konserves','🍝',500,'g'],
+    ['Ελαιόλαδο ΕΠ 750ml','ΕΛΑΪ́Σ','konserves','🫒',0.75,'lt'],
+    ['Τόνος σε Νερό 160g','JOHN WEST','konserves','🐟',160,'g'],
+    ['Ρύζι Parboiled 1kg','UNCLE BENS','konserves','🌾',1,'kg'],
+    ['Espresso 250g','LAVAZZA','kafes','☕',250,'g'],
+    ['Nescafé Classic 200g','NESTLE','kafes','☕',200,'g'],
+    ['Χυμός Πορτοκάλι 1lt','TROPICANA','anapsyktika','🍊',1,'lt'],
+    ['Coca-Cola 1.5lt','COCA-COLA','anapsyktika','🥤',1.5,'lt'],
+    ['Νερό Εμφιαλ. 1.5lt','ΑΥΡΑ','anapsyktika','💧',1.5,'lt'],
+    ['Σαμπουάν 400ml','HEAD&SHOULDERS','prosopikhfrontida','🧴',400,'ml'],
+    ['Οδοντόκρεμα 75ml','COLGATE','prosopikhfrontida','🪥',75,'ml'],
+    ['Απορρυπαντικό 3kg','ARIEL','katharistika','🧼',3,'kg'],
+    ['Υγρό Πιάτων 500ml','FAIRY','katharistika','🫧',500,'ml'],
+    ['Κοτόπουλο Κατεψ. 1kg','ΠΤΗΝΟΤΡΟΦΙΚΗ','katepsygmena','🍗',1,'kg'],
+  ];
+  const basePrices=[1.89,1.49,1.99,5.49,2.89,1.49,1.09,6.49,1.29,1.99,4.99,3.49,2.29,1.89,0.59,3.49,2.19,9.99,1.79,4.99];
+  const result=[];
+
+  // Δημιουργούμε ιστορικό τιμών: 30 μέρες πίσω
+  const now = Date.now();
+  const DAY = 86400000;
+
+  items.forEach(([name,brand,cat,emoji,size,unit],i) => {
+    chains.forEach(chain => {
+      const base = basePrices[i] * (0.88 + Math.random()*0.3);
+      const isOffer = Math.random() < 0.28;
+      const price = isOffer ? +(base*0.82).toFixed(2) : +base.toFixed(2);
+
+      // Ιστορικό: 8 σημεία σε 30 μέρες
+      const history = [];
+      for (let d=30; d>=0; d-=4) {
+        const variation = 0.93 + Math.random()*0.15;
+        history.push({
+          date: new Date(now - d*DAY).toISOString().split('T')[0],
+          price: +(basePrices[i] * variation).toFixed(2),
+        });
+      }
+      // Τελευταία εγγραφή = τρέχουσα τιμή
+      history[history.length-1].price = price;
+
+      result.push({
+        chain, name, brand, category:cat, emoji, unit_size:size, unit,
+        ean: `590${String(i).padStart(10,'0')}`,
+        price, is_offer:isOffer,
+        offer_original_price: isOffer ? +base.toFixed(2) : null,
+        price_per_unit: +(price/size).toFixed(3),
+        image_url: null,
+        url: '#',
+        scraped_at: new Date().toISOString(),
+        history,
+      });
+    });
+  });
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════
+// UI INIT
+// ════════════════════════════════════════════════════════════
+function initUI() {
+  buildCategories();
+  applyFilters();
+  renderOffers();
+  renderHistory();
+  updateStats();
+}
+
+function buildCategories() {
+  const cats = [...new Set(state.products.map(p=>p.category).filter(Boolean))];
+  const row = document.getElementById('catRow');
+  row.innerHTML = `<div class="cat-chip active" data-cat="">Όλα</div>` +
+    cats.map(c => `<div class="cat-chip" data-cat="${c}">${CAT_EMOJI[c]||'📦'} ${CAT_LABELS[c]||c}</div>`).join('');
+
+  row.querySelectorAll('.cat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      row.querySelectorAll('.cat-chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      state.activeCat = chip.dataset.cat;
+      applyFilters();
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// FILTER & RENDER
+// ════════════════════════════════════════════════════════════
+function applyFilters() {
+  const q = state.searchQ.toLowerCase();
+  state.filtered = state.products.filter(p => {
+    if (state.activeChain !== 'all' && p.chain !== state.activeChain) return false;
+    if (state.activeCat && p.category !== state.activeCat) return false;
+    if (q) {
+      const hay = `${p.name} ${p.brand||''} ${p.category||''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b)=>a.price-b.price);
+
+  renderProducts();
+  updateStats();
+}
+
+function updateStats() {
+  const offers = state.filtered.filter(p=>p.is_offer).length;
+  document.getElementById('sTotal').textContent  = state.filtered.length;
+  document.getElementById('sOffers').textContent = offers;
+
+  const dates = state.products.map(p=>p.scraped_at).sort();
+  if (dates.length) {
+    const d = new Date(dates[dates.length-1]);
+    document.getElementById('sTime').textContent =
+      d.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'});
+  }
+}
+
+function renderProducts() {
+  const list = document.getElementById('productList');
+  const items = state.filtered.slice(0, 100);
+
+  if (!items.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="e-icon">🔍</div>
+      <h3>Δεν βρέθηκαν αποτελέσματα</h3>
+      <p>Δοκιμάστε διαφορετικό όρο αναζήτησης ή αφαιρέστε κάποιο φίλτρο.</p>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = items.map((p,i) => {
+    const inCmp = state.compareList.some(c=>c===p);
+    const savePct = p.is_offer && p.offer_original_price
+      ? Math.round((1 - p.price/p.offer_original_price)*100) : 0;
+
+    return `<div class="pcard chain-${p.chain}${inCmp?' cmp-selected':''}"
+      style="${inCmp?'outline:2px solid var(--accent);':''}border-radius:14px"
+      data-idx="${i}">
+      <div class="pcard-top">
+        <div class="pcard-img">${p.emoji||'📦'}</div>
+        <div class="pcard-info">
+          <div class="pcard-chain-row">
+            <span class="chain-dot"></span>
+            <span class="chain-label">${CHAIN_LABELS[p.chain]||p.chain}</span>
+            ${p.is_offer ? `<span class="offer-tag">-${savePct}%</span>` : ''}
+          </div>
+          <div class="pcard-name">${p.name}</div>
+          ${p.brand?`<div class="pcard-brand">${p.brand}</div>`:''}
+          <div class="pcard-price-row">
+            <span class="pcard-price">${p.price.toFixed(2)}€</span>
+            ${p.is_offer&&p.offer_original_price?`<span class="pcard-was">${p.offer_original_price.toFixed(2)}€</span>`:''}
+            ${p.price_per_unit&&p.unit?`<span class="pcard-ppu">${p.price_per_unit.toFixed(2)}€/${p.unit}</span>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Events
+  list.querySelectorAll('.pcard').forEach((card, i) => {
+    card.addEventListener('click', () => openProductSheet(items[i]));
+    card.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      toggleCompare(items[i]);
+      renderProducts();
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// OFFERS PAGE
+// ════════════════════════════════════════════════════════════
+function renderOffers() {
+  const offers = state.products.filter(p=>p.is_offer)
+    .sort((a,b)=>{
+      const sa = (1-a.price/a.offer_original_price);
+      const sb = (1-b.price/b.offer_original_price);
+      return sb-sa;
+    });
+
+  document.getElementById('offersCount').textContent =
+    `${offers.length} προσφορές από 4 αλυσίδες`;
+
+  const grid = document.getElementById('offersGrid');
+  if (!offers.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="e-icon">🏷️</div><h3>Δεν υπάρχουν προσφορές</h3>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = offers.slice(0,40).map((p,i) => {
+    const savePct = Math.round((1-p.price/p.offer_original_price)*100);
+    return `<div class="ocard chain-${p.chain}" data-idx="${i}">
+      <div class="ocard-chain-bar"></div>
+      <div class="ocard-img">${p.emoji||'📦'}</div>
+      <div class="ocard-body">
+        <div class="ocard-name">${p.name}</div>
+        <div class="ocard-price-row">
+          <span class="ocard-price">${p.price.toFixed(2)}€</span>
+          <span class="ocard-was">${p.offer_original_price.toFixed(2)}€</span>
+        </div>
+        <span class="ocard-save">Εξοικονόμηση ${savePct}%</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('.ocard').forEach((card, i) => {
+    card.addEventListener('click', () => openProductSheet(offers[i]));
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// HISTORY PAGE
+// ════════════════════════════════════════════════════════════
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (!state.viewedHistory.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="e-icon">📈</div>
+      <h3>Δεν έχετε δει κανένα προϊόν ακόμα</h3>
+      <p>Πατήστε σε ένα προϊόν για να δείτε το ιστορικό τιμών του.</p>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = state.viewedHistory.slice(0,20).map((item, i) => `
+    <div class="hist-item" data-idx="${i}">
+      <div class="hist-icon">${item.emoji||'📦'}</div>
+      <div class="hist-info">
+        <div class="hist-name">${item.name}</div>
+        <div class="hist-meta">${CHAIN_LABELS[item.chain]||item.chain} · ${item.category||''}</div>
+      </div>
+      <div class="hist-price">${item.price.toFixed(2)}€</div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.hist-item').forEach((el, i) => {
+    el.addEventListener('click', () => {
+      const item = state.viewedHistory[i];
+      const found = state.products.find(p => p.chain===item.chain && p.name===item.name);
+      if (found) openProductSheet(found);
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// PRODUCT SHEET
+// ════════════════════════════════════════════════════════════
+let activeChart = null;
+
+function openProductSheet(product) {
+  // Αποθήκευση στο ιστορικό
+  const histItem = {
+    name: product.name, chain: product.chain, price: product.price,
+    emoji: product.emoji||'📦', category: product.category
+  };
+  state.viewedHistory = [histItem,
+    ...state.viewedHistory.filter(h=>!(h.name===histItem.name&&h.chain===histItem.chain))
+  ].slice(0,30);
+  localStorage.setItem('pw_history', JSON.stringify(state.viewedHistory));
+  renderHistory();
+
+  // Header
+  const header = document.getElementById('sheetHeader');
+  header.innerHTML = `
+    <div class="sheet-title">${product.name}</div>
+    <div class="sheet-chain-row">
+      <span class="sheet-chain-badge" style="background:var(--${product.chain})">
+        ${CHAIN_LABELS[product.chain]||product.chain}
+      </span>
+      ${product.brand?`<span style="font-size:.75rem;color:var(--muted)">${product.brand}</span>`:''}
+    </div>
+  `;
+
+  // Body
+  const savePct = product.is_offer && product.offer_original_price
+    ? Math.round((1-product.price/product.offer_original_price)*100) : 0;
+
+  const body = document.getElementById('sheetBody');
+  body.innerHTML = `
+    <div class="sheet-price-big">${product.price.toFixed(2)}€</div>
+    ${product.is_offer&&product.offer_original_price
+      ? `<div class="sheet-price-was">${product.offer_original_price.toFixed(2)}€ &nbsp;-${savePct}%</div>` : ''}
+    ${product.price_per_unit&&product.unit
+      ? `<div class="sheet-ppu">${product.price_per_unit.toFixed(2)}€ ανά ${product.unit}</div>`
+      : '<div class="sheet-ppu">&nbsp;</div>'}
+
+    <div class="chart-section">
+      <h3>Ιστορικό Τιμών — 30 Ημέρες</h3>
+      <div class="sheet-chart-wrap">
+        <canvas id="sheetChart"></canvas>
+      </div>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn-add-compare" id="sheetCmpBtn">
+        ${state.compareList.some(c=>c===product) ? '✓ Στη Σύγκριση' : '⚖️ Πρόσθεσε στη Σύγκριση'}
+      </button>
+      ${product.url && product.url!=='#'
+        ? `<a class="btn-open-url" href="${product.url}" target="_blank">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            Eshop
+          </a>` : ''}
+    </div>
+  `;
+
+  // Chart
+  if (activeChart) { activeChart.destroy(); activeChart = null; }
+  const history = product.history || [];
+  if (history.length > 1) {
+    const ctx = document.getElementById('sheetChart').getContext('2d');
+    const prices = history.map(h=>h.price);
+    const minP = Math.min(...prices);
+    const maxP = Math.max(...prices);
+
+    activeChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: history.map(h=>h.date.slice(5)),
+        datasets: [{
+          data: prices,
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34,197,94,0.08)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#22c55e',
+          tension: 0.3,
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)}€` }
+        }},
+        scales: {
+          x: { grid:{color:'#2a2d3a'}, ticks:{color:'#6b7280',font:{size:10}} },
+          y: {
+            grid:{color:'#2a2d3a'}, ticks:{color:'#6b7280',font:{size:10},
+            callback: v => v.toFixed(2)+'€'},
+            min: +(minP*0.97).toFixed(2),
+            max: +(maxP*1.03).toFixed(2),
+          }
+        }
+      }
+    });
+  }
+
+  // Compare button
+  document.getElementById('sheetCmpBtn').addEventListener('click', () => {
+    toggleCompare(product);
+    const btn = document.getElementById('sheetCmpBtn');
+    if (btn) btn.textContent = state.compareList.some(c=>c===product)
+      ? '✓ Στη Σύγκριση' : '⚖️ Πρόσθεσε στη Σύγκριση';
+  });
+
+  document.getElementById('sheetOverlay').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('sheetOverlay').classList.remove('open');
+  if (activeChart) { activeChart.destroy(); activeChart = null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// COMPARE
+// ════════════════════════════════════════════════════════════
+function toggleCompare(product) {
+  const idx = state.compareList.indexOf(product);
+  if (idx > -1) {
+    state.compareList.splice(idx, 1);
+  } else {
+    if (state.compareList.length >= 4) return;
+    state.compareList.push(product);
+  }
+  renderCompareStrip();
+  renderComparePage();
+}
+
+function renderCompareStrip() {
+  const strip = document.getElementById('compareStrip');
+  const items = document.getElementById('compareStripItems');
+
+  if (!state.compareList.length) {
+    strip.classList.remove('visible');
+    return;
+  }
+  strip.classList.add('visible');
+
+  items.innerHTML = state.compareList.map((p,i) => `
+    <div class="cstrip-chip">
+      <span>${p.emoji||'📦'} ${p.name.slice(0,20)}${p.name.length>20?'…':''}</span>
+      <span class="cstrip-rm" data-i="${i}">×</span>
+    </div>
+  `).join('');
+
+  items.querySelectorAll('.cstrip-rm').forEach(rm => {
+    rm.addEventListener('click', e => {
+      e.stopPropagation();
+      state.compareList.splice(+rm.dataset.i, 1);
+      renderCompareStrip();
+      renderComparePage();
+      renderProducts();
+    });
+  });
+}
+
+function renderComparePage() {
+  const content = document.getElementById('comparePageContent');
+  if (!state.compareList.length) {
+    content.innerHTML = `<div class="compare-hint">
+      <div style="font-size:3rem;margin-bottom:12px">⚖️</div>
+      <h3>Κανένα προϊόν</h3>
+      <p>Πήγαινε στην Αναζήτηση,<br>πάτησε παρατεταμένα σε προϊόντα για να τα προσθέσεις εδώ.</p>
+    </div>`;
+    return;
+  }
+
+  // Group by unique product names (compare across chains)
+  const groups = {};
+  state.compareList.forEach(p => {
+    const key = p.name;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+
+  const prices  = state.compareList.map(p=>p.price);
+  const minPrice = Math.min(...prices);
+
+  let html = '<div class="compare-content">';
+
+  Object.entries(groups).forEach(([name, products]) => {
+    html += `<div class="cmp-product-name">${products[0].emoji||'📦'} ${name}</div>`;
+    if (products[0].brand) html += `<div class="cmp-product-sub">${products[0].brand}</div>`;
+
+    html += `<div class="cmp-prices-grid">`;
+    products.forEach(p => {
+      const diff = p.price - minPrice;
+      const isCheapest = diff < 0.005;
+      const savePct = p.is_offer && p.offer_original_price
+        ? Math.round((1-p.price/p.offer_original_price)*100) : 0;
+
+      html += `<div class="cmp-card ${isCheapest?'cheapest':''}">
+        <div class="cmp-card-chain">${CHAIN_LABELS[p.chain]||p.chain}</div>
+        <div class="cmp-card-price">${p.price.toFixed(2)}€</div>
+        <div class="cmp-card-diff">
+          ${isCheapest ? '✓ Φθηνότερο' : `+${diff.toFixed(2)}€`}
+        </div>
+        ${p.is_offer ? `<div class="cmp-card-offer">-${savePct}%</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+
+    // Mini chart για κάθε group
+    if (products.length === 1 && products[0].history) {
+      html += `<div class="chart-section">
+        <h3>Ιστορικό τιμής</h3>
+        <div class="chart-wrap"><canvas id="cmpChart_${name.replace(/\s/g,'_')}"></canvas></div>
+      </div>`;
+    }
+  });
+
+  html += '</div>';
+  content.innerHTML = html;
+
+  // Render mini charts
+  Object.entries(groups).forEach(([name, products]) => {
+    if (products.length === 1 && products[0].history) {
+      const canvasId = `cmpChart_${name.replace(/\s/g,'_')}`;
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const h = products[0].history;
+      new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: h.map(x=>x.date.slice(5)),
+          datasets: [{
+            data: h.map(x=>x.price),
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34,197,94,0.07)',
+            borderWidth: 2,
+            pointRadius: 2,
+            tension: 0.3,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins:{legend:{display:false}},
+          scales:{
+            x:{grid:{color:'#2a2d3a'},ticks:{color:'#6b7280',font:{size:9}}},
+            y:{grid:{color:'#2a2d3a'},ticks:{color:'#6b7280',font:{size:9},callback:v=>v.toFixed(2)+'€'}},
+          }
+        }
+      });
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════════
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById(`page-${page}`)?.classList.add('active');
+  document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+  state.currentPage = page;
+}
+
+// ════════════════════════════════════════════════════════════
+// EVENTS
+// ════════════════════════════════════════════════════════════
+function bindEvents() {
+  // Nav
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => navigate(item.dataset.page));
+  });
+
+  // Search
+  document.getElementById('searchInput').addEventListener('input', e => {
+    state.searchQ = e.target.value;
+    applyFilters();
+  });
+
+  // Chain pills
+  document.getElementById('chainPills').addEventListener('click', e => {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+    pill.classList.add('active');
+    state.activeChain = pill.dataset.chain;
+    applyFilters();
+  });
+
+  // Sheet overlay close
+  document.getElementById('sheetOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeSheet();
+  });
+
+  // Go compare button
+  document.getElementById('btnGoCompare').addEventListener('click', () => {
+    navigate('compare');
+  });
+
+  // Swipe down to close sheet
+  let startY = 0;
+  const sheet = document.getElementById('sheet');
+  sheet.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, {passive:true});
+  sheet.addEventListener('touchend', e => {
+    if (e.changedTouches[0].clientY - startY > 80) closeSheet();
+  }, {passive:true});
+
+  // PWA install prompt
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('btnInstall').style.display = 'flex';
+  });
+
+  document.getElementById('btnInstall').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') document.getElementById('btnInstall').style.display = 'none';
+    deferredPrompt = null;
+  });
+
+  // Quick URL param handling (shortcuts)
+  const params = new URLSearchParams(location.search);
+  if (params.get('tab') === 'offers') navigate('offers');
+}
+
+// ════════════════════════════════════════════════════════════
+// SERVICE WORKER
+// ════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(reg => {
+      console.log('[SW] Registered:', reg.scope);
+      // Background sync για ανανέωση τιμών
+      if ('sync' in reg) {
+        reg.sync.register('refresh-prices').catch(()=>{});
+      }
+    })
+    .catch(err => console.warn('[SW] Failed:', err));
+}
+
+// ════════════════════════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════════════════════════
+bindEvents();
+loadData();
+</script>
+</body>
+</html>

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1117">
+<title>Smart Basket — PriceWatch GR</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#222535;--border:#2a2d3a;
+  --text:#e8eaf0;--muted:#6b7280;--accent:#22c55e;--offer:#f59e0b;
+  --danger:#ef4444;--ab:#e3001b;--skl:#004990;--lidl:#0050aa;--mym:#e67e22;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bot:env(safe-area-inset-bottom,0px);
+  --nav-h:60px;--mono:'JetBrains Mono',monospace;--sans:'Inter',-apple-system,sans-serif;
+}
+html,body{height:100%;overflow:hidden;font-family:var(--sans);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+#app{display:flex;flex-direction:column;height:100%;padding-top:var(--safe-top)}
+.topbar{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid var(--border);background:var(--bg)}
+.topbar-logo{font-size:1.2rem;font-weight:800;letter-spacing:-.5px;color:var(--accent)}
+.topbar-logo span{color:var(--text)}
+.topbar-sub{font-size:.7rem;color:var(--muted);font-weight:500;letter-spacing:.3px}
+.icon-btn{width:38px;height:38px;border-radius:10px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted)}
+.icon-btn.accent{border-color:var(--accent);color:var(--accent)}
+.pages{flex:1;overflow:hidden;position:relative}
+.page{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none}
+.page.active{display:block}
+.bottom-nav{flex-shrink:0;height:calc(var(--nav-h) + var(--safe-bot));padding-bottom:var(--safe-bot);background:var(--surface);border-top:1px solid var(--border);display:flex}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--muted);font-size:.65rem;font-weight:600;transition:color .15s;padding-bottom:2px}
+.nav-item svg{width:22px;height:22px}
+.nav-item.active{color:var(--accent)}
+
+/* Auth */
+.auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:32px;gap:16px;text-align:center}
+.auth-logo{font-size:3rem}
+.auth-title{font-size:1.3rem;font-weight:800}
+.auth-sub{font-size:.85rem;color:var(--muted);line-height:1.5;max-width:280px}
+.auth-input{width:100%;padding:14px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:1rem;font-family:var(--sans);outline:none;text-align:center}
+.auth-input:focus{border-color:var(--accent)}
+.btn-primary{width:100%;padding:14px;background:var(--accent);color:#000;border:none;border-radius:12px;font-weight:700;font-size:1rem;cursor:pointer;font-family:var(--sans)}
+.btn-ghost{width:100%;padding:12px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:12px;font-weight:600;font-size:.9rem;cursor:pointer;font-family:var(--sans)}
+
+/* Baskets list */
+.section-header{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.section-header h2{font-size:1rem;font-weight:700}
+.baskets-list{padding:12px;display:flex;flex-direction:column;gap:10px}
+.basket-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;display:flex;align-items:center;gap:14px}
+.basket-card:active{opacity:.8}
+.basket-icon{font-size:1.8rem}
+.basket-info{flex:1;min-width:0}
+.basket-name{font-size:.95rem;font-weight:600;margin-bottom:3px}
+.basket-meta{font-size:.75rem;color:var(--muted)}
+.btn-new-basket{margin:0 12px;padding:14px;background:var(--surface2);border:1.5px dashed var(--border);border-radius:14px;color:var(--muted);font-size:.9rem;font-weight:600;cursor:pointer;font-family:var(--sans);width:calc(100% - 24px);text-align:center}
+
+/* Detail */
+.basket-topbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
+.basket-topbar-title{flex:1;font-size:1rem;font-weight:700}
+.add-item-area{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.add-input-wrap{flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px 12px}
+.add-input-wrap:focus-within{border-color:var(--accent)}
+.add-input-wrap input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:.9rem;font-family:var(--sans)}
+.add-input-wrap input::placeholder{color:var(--muted)}
+.btn-scan{width:44px;height:44px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);flex-shrink:0}
+.btn-add{height:44px;padding:0 16px;background:var(--accent);color:#000;border:none;border-radius:12px;font-weight:700;font-size:.85rem;cursor:pointer;font-family:var(--sans);flex-shrink:0}
+
+/* Suggestions */
+.suggestions{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:0 16px 8px;overflow:hidden;display:none}
+.suggestions.visible{display:block}
+.suggestion-item{padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;border-bottom:1px solid var(--border)}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:active{background:var(--surface2)}
+.sug-emoji{font-size:1.2rem;width:28px;text-align:center}
+.sug-info{flex:1;min-width:0}
+.sug-name{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sug-brand{font-size:.72rem;color:var(--muted)}
+.sug-price{font-family:var(--mono);font-size:.85rem;color:var(--accent);font-weight:700}
+
+/* Items */
+.items-list{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.item-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px}
+.item-row.checked{opacity:.45}
+.item-check{width:24px;height:24px;border-radius:6px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.item-check.done{background:var(--accent);border-color:var(--accent);color:#000;font-size:.85rem;font-weight:700}
+.item-info{flex:1;min-width:0}
+.item-name{font-size:.88rem;font-weight:600;margin-bottom:2px}
+.item-meta{font-size:.72rem;color:var(--muted)}
+.item-qty-ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.qty-btn{width:28px;height:28px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);font-size:1rem;font-weight:600}
+.qty-val{font-family:var(--mono);font-size:.85rem;font-weight:700;min-width:18px;text-align:center}
+.item-del{width:30px;height:30px;border-radius:8px;background:transparent;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem}
+.item-del:active{color:var(--danger)}
+
+/* Optimizer */
+.opt-header{padding:16px;border-bottom:1px solid var(--border)}
+.opt-header h2{font-size:1rem;font-weight:700;margin-bottom:4px}
+.opt-header p{font-size:.78rem;color:var(--muted)}
+.opt-content{padding:12px}
+.mode-tabs{display:flex;gap:8px;margin-bottom:16px;background:var(--surface);border-radius:12px;padding:4px}
+.mode-tab{flex:1;padding:10px 8px;border:none;background:none;color:var(--muted);font-size:.8rem;font-weight:600;cursor:pointer;border-radius:10px;font-family:var(--sans);text-align:center}
+.mode-tab.active{background:var(--surface2);color:var(--text)}
+
+/* Store results */
+.store-result{background:var(--surface);border:1.5px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.store-result.winner{border-color:var(--accent)}
+.store-result-header{padding:14px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.store-badge{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.8rem;color:white;flex-shrink:0}
+.store-badge.ab{background:var(--ab)}.store-badge.sklavenitis{background:var(--skl)}.store-badge.lidl{background:var(--lidl)}.store-badge.mymarket{background:var(--mym)}
+.store-result-info{flex:1}
+.store-result-name{font-size:.9rem;font-weight:700}
+.store-result-coverage{font-size:.72rem;color:var(--muted);margin-top:2px}
+.store-total{font-family:var(--mono);font-size:1.5rem;font-weight:800;color:var(--accent);flex-shrink:0}
+.store-result:not(.winner) .store-total{color:var(--text)}
+.winner-badge{font-size:.65rem;font-weight:700;background:var(--accent);color:#000;padding:2px 8px;border-radius:4px;display:inline-block;margin-top:4px}
+.store-items{padding:8px 16px 14px}
+.store-item-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:.82rem}
+.store-item-row:last-child{border-bottom:none}
+.store-item-name{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.store-item-price{font-family:var(--mono);font-weight:600;font-size:.82rem;color:var(--text);flex-shrink:0;margin-left:8px}
+.store-item-notfound{color:var(--danger);font-size:.72rem;font-style:italic}
+
+/* Split basket */
+.split-result{background:var(--surface);border:1.5px solid var(--accent);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.split-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.split-header h3{font-size:.9rem;font-weight:700;color:var(--accent)}
+.split-saving{font-size:.8rem;color:var(--offer);font-weight:600}
+.split-stores{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.split-store{background:var(--bg);border-radius:10px;padding:12px}
+.split-store-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.split-store-badge{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.7rem;color:white;flex-shrink:0}
+.split-store-badge.ab{background:var(--ab)}.split-store-badge.sklavenitis{background:var(--skl)}.split-store-badge.lidl{background:var(--lidl)}.split-store-badge.mymarket{background:var(--mym)}
+.split-store-name{font-size:.82rem;font-weight:700;flex:1}
+.split-store-sub{font-family:var(--mono);font-size:.82rem;font-weight:700;color:var(--accent)}
+.split-item{display:flex;justify-content:space-between;font-size:.78rem;padding:4px 0;border-bottom:1px solid var(--border)}
+.split-item:last-child{border-bottom:none}
+.split-item-name{color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.split-item-price{font-family:var(--mono);font-weight:600;flex-shrink:0;margin-left:8px}
+
+/* Totals */
+.totals-compare{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.totals-compare h3{font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:12px}
+.total-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.total-row:last-child{border-bottom:none}
+.total-store{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:600}
+.total-price{font-family:var(--mono);font-size:.95rem;font-weight:700}
+.total-row.best .total-price{color:var(--accent)}
+.total-diff{font-size:.72rem;color:var(--muted)}
+
+/* Scanner */
+.scanner-overlay{display:none;position:fixed;inset:0;background:#000;z-index:200;flex-direction:column}
+.scanner-overlay.open{display:flex}
+.scanner-topbar{padding:16px;display:flex;align-items:center;gap:12px;position:absolute;top:0;left:0;right:0;z-index:10;background:linear-gradient(to bottom,rgba(0,0,0,.8),transparent)}
+.scanner-topbar h3{color:white;font-size:1rem;font-weight:700;flex:1}
+.btn-scanner-close{background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px 14px;color:white;font-weight:600;cursor:pointer;font-family:var(--sans)}
+#scannerVideo{width:100%;height:100%;object-fit:cover}
+.scanner-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.scanner-box{width:240px;height:160px;border:3px solid var(--accent);border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.5)}
+.scanner-hint{position:absolute;bottom:40px;left:0;right:0;text-align:center;color:rgba(255,255,255,.7);font-size:.85rem}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:150;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal-sheet{width:100%;background:var(--surface);border-radius:20px 20px 0 0;padding:0 0 calc(var(--safe-bot) + 16px);animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 8px}
+.modal-body{padding:16px}
+.modal-title{font-size:1rem;font-weight:700;margin-bottom:14px}
+.modal-input{width:100%;padding:12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:.95rem;font-family:var(--sans);outline:none}
+.modal-input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px;margin-top:14px}
+.btn-modal-ok{flex:1;padding:13px;background:var(--accent);color:#000;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+.btn-modal-cancel{padding:13px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:600;cursor:pointer;font-family:var(--sans)}
+
+/* Utils */
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted)}
+.empty-state .e-icon{font-size:3rem;margin-bottom:12px}
+.empty-state h3{color:var(--text);font-size:1rem;margin-bottom:6px}
+.empty-state p{font-size:.82rem;line-height:1.5}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-inline{display:flex;align-items:center;gap:10px;padding:20px;justify-content:center;color:var(--muted);font-size:.85rem}
+.toast{position:fixed;bottom:calc(var(--nav-h) + var(--safe-bot) + 12px);left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-size:.82rem;font-weight:600;white-space:nowrap;z-index:300;animation:toastIn .2s ease;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div>
+      <div class="topbar-logo">Price<span>Watch</span></div>
+      <div class="topbar-sub">SMART BASKET</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="icon-btn" id="btnSync">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="pages">
+    <!-- AUTH -->
+    <div class="page active" id="page-auth">
+      <div class="auth-screen">
+        <div class="auth-logo">🛒</div>
+        <div class="auth-title">Smart Basket</div>
+        <div class="auth-sub">Σύνδεσε email για sync σε όλες τις συσκευές. Ή συνέχισε χωρίς σύνδεση.</div>
+        <input class="auth-input" id="authEmail" type="email" placeholder="email@example.com">
+        <button class="btn-primary" id="btnSendOtp">Αποστολή κωδικού →</button>
+        <div id="otpSection" style="display:none;width:100%;display:flex;flex-direction:column;gap:10px">
+          <input class="auth-input" id="authOtp" type="number" placeholder="6ψήφιος κωδικός">
+          <button class="btn-primary" id="btnVerifyOtp">Επιβεβαίωση →</button>
+        </div>
+        <button class="btn-ghost" id="btnSkipAuth">Συνέχεια χωρίς σύνδεση</button>
+      </div>
+    </div>
+
+    <!-- BASKETS -->
+    <div class="page" id="page-baskets">
+      <div class="section-header">
+        <h2>🛒 Οι Λίστες μου</h2>
+        <div class="icon-btn accent" id="btnNewBasket">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </div>
+      </div>
+      <div class="baskets-list" id="basketsList"></div>
+    </div>
+
+    <!-- DETAIL -->
+    <div class="page" id="page-detail">
+      <div class="basket-topbar">
+        <div class="icon-btn" id="btnBack">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        </div>
+        <div class="basket-topbar-title" id="detailTitle">Λίστα</div>
+        <div class="icon-btn accent" id="btnOptimize">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+        </div>
+      </div>
+      <div class="add-item-area">
+        <div class="add-input-wrap">
+          <svg width="15" height="15" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input id="addInput" type="text" placeholder="Πρόσθεσε προϊόν...">
+        </div>
+        <div class="btn-scan" id="btnScan">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M3 9V6a3 3 0 0 1 3-3h3M15 3h3a3 3 0 0 1 3 3v3M3 15v3a3 3 0 0 1 3 3h3M15 21h3a3 3 0 0 1 3-3v-3"/>
+            <line x1="8" y1="7" x2="8" y2="17"/><line x1="12" y1="7" x2="12" y2="17"/><line x1="16" y1="7" x2="16" y2="17"/>
+          </svg>
+        </div>
+        <button class="btn-add" id="btnAdd">+</button>
+      </div>
+      <div class="suggestions" id="suggestions"></div>
+      <div class="items-list" id="itemsList"></div>
+    </div>
+
+    <!-- OPTIMIZER -->
+    <div class="page" id="page-optimizer">
+      <div class="basket-topbar">
+        <div class="icon-btn" id="btnBackOpt">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        </div>
+        <div class="basket-topbar-title">📊 Βελτιστοποίηση</div>
+      </div>
+      <div class="opt-header">
+        <h2>Σύγκριση Καλαθιού</h2>
+        <p id="optSubtitle">Αναλύουμε τις τιμές...</p>
+      </div>
+      <div class="opt-content" id="optContent">
+        <div class="loading-inline"><div class="spinner"></div>Υπολογισμός...</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active" data-page="baskets">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 0 1-8 0"/>
+      </svg>
+      Λίστες
+    </div>
+    <div class="nav-item" data-page="optimizer">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      Σύγκριση
+    </div>
+    <div class="nav-item" data-page="pricewatch">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      Τιμές
+    </div>
+  </nav>
+</div>
+
+<!-- Scanner -->
+<div class="scanner-overlay" id="scannerOverlay">
+  <div class="scanner-topbar">
+    <h3>📷 Σκάναρε Barcode</h3>
+    <button class="btn-scanner-close" id="btnCloseScanner">Κλείσιμο</button>
+  </div>
+  <video id="scannerVideo" playsinline autoplay muted></video>
+  <div class="scanner-frame"><div class="scanner-box"></div></div>
+  <div class="scanner-hint">Κέντραρε το barcode στο πλαίσιο</div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-body">
+      <div class="modal-title" id="modalTitle">Νέα Λίστα</div>
+      <input class="modal-input" id="modalInput" type="text" placeholder="Όνομα λίστας...">
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" id="btnModalCancel">Άκυρο</button>
+        <button class="btn-modal-ok" id="btnModalOk">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ── Βάλε τα Supabase credentials σου ──────────────
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CHAIN_LABELS = {ab:'ΑΒ',sklavenitis:'Σκλαβενίτης',lidl:'Lidl',mymarket:'My Market'};
+const CHAIN_ABBR   = {ab:'ΑΒ',sklavenitis:'ΣΚ',lidl:'LI',mymarket:'ΜΜ'};
+const CHAINS       = ['ab','sklavenitis','lidl','mymarket'];
+
+const S = { user:null, baskets:[], currentBasket:null, items:[], products:[], codeReader:null };
+
+// ── INIT ────────────────────────────────────────────────────
+async function init() {
+  try { const r=await fetch('data/prices.json'); S.products=r.ok?await r.json():demo(); }
+  catch { S.products=demo(); }
+  const {data:{session}} = await sb.auth.getSession();
+  if (session) { S.user=session.user; goPage('baskets'); loadBaskets(); }
+  else goPage('auth');
+  bindAll();
+}
+
+// ── AUTH ────────────────────────────────────────────────────
+async function sendOtp() {
+  const email=document.getElementById('authEmail').value.trim();
+  if(!email) return toast('Βάλε email');
+  const {error}=await sb.auth.signInWithOtp({email});
+  if(error) return toast('Σφάλμα');
+  document.getElementById('otpSection').style.display='flex';
+  toast('Κωδικός εστάλη ✓');
+}
+async function verifyOtp() {
+  const email=document.getElementById('authEmail').value.trim();
+  const token=document.getElementById('authOtp').value.trim();
+  const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
+  if(error) return toast('Λάθος κωδικός');
+  S.user=data.user; goPage('baskets'); loadBaskets();
+}
+function skipAuth() { S.user={id:'local_'+Date.now(),isAnon:true}; goPage('baskets'); loadBaskets(); }
+
+// ── BASKETS ─────────────────────────────────────────────────
+async function loadBaskets() {
+  if(S.user?.isAnon) { S.baskets=JSON.parse(localStorage.getItem('pw_baskets')||'[]'); }
+  else {
+    const {data}=await sb.from('baskets').select('*, basket_items(count)')
+      .eq('user_id',S.user.id).order('updated_at',{ascending:false});
+    S.baskets=data||[];
+  }
+  renderBaskets();
+}
+
+function renderBaskets() {
+  const el=document.getElementById('basketsList');
+  if(!S.baskets.length) {
+    el.innerHTML=`<div class="empty-state"><div class="e-icon">🛒</div><h3>Δεν έχεις λίστες</h3><p>Δημιούργησε μια λίστα ψωνιών.</p></div>`;
+    return;
+  }
+  el.innerHTML=S.baskets.map((b,i)=>`
+    <div class="basket-card" data-i="${i}">
+      <div class="basket-icon">🛒</div>
+      <div class="basket-info">
+        <div class="basket-name">${b.name}</div>
+        <div class="basket-meta">${b.basket_items?.[0]?.count??b.itemCount??0} προϊόντα</div>
+      </div>
+      <span style="color:var(--muted)">›</span>
+    </div>`).join('')+`<button class="btn-new-basket" id="btnNewBasket2">+ Νέα Λίστα</button>`;
+  el.querySelectorAll('.basket-card').forEach(c=>c.addEventListener('click',()=>openBasket(S.baskets[+c.dataset.i])));
+  document.getElementById('btnNewBasket2')?.addEventListener('click',promptNew);
+}
+
+function promptNew() {
+  showModal('Νέα Λίστα','Όνομα...','Λίστα ψωνιών',async name=>{
+    const b={id:'b_'+Date.now(),name,user_id:S.user.id,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),itemCount:0};
+    if(S.user?.isAnon){S.baskets.unshift(b);localStorage.setItem('pw_baskets',JSON.stringify(S.baskets));}
+    else{const{data}=await sb.from('baskets').insert({name,user_id:S.user.id}).select().single();if(data){b.id=data.id;S.baskets.unshift(data);}else S.baskets.unshift(b);}
+    renderBaskets(); openBasket(S.baskets[0]);
+  });
+}
+
+// ── DETAIL ──────────────────────────────────────────────────
+async function openBasket(basket) {
+  S.currentBasket=basket;
+  document.getElementById('detailTitle').textContent=basket.name;
+  goPage('detail');
+  if(S.user?.isAnon){S.items=JSON.parse(localStorage.getItem('pw_items_'+basket.id)||'[]');}
+  else{const{data}=await sb.from('basket_items').select('*').eq('basket_id',basket.id).order('created_at');S.items=data||[];}
+  renderItems();
+}
+
+function renderItems() {
+  const el=document.getElementById('itemsList');
+  if(!S.items.length){el.innerHTML=`<div class="empty-state"><div class="e-icon">📝</div><h3>Άδεια λίστα</h3><p>Πρόσθεσε προϊόντα ή σκάναρε barcode.</p></div>`;return;}
+  el.innerHTML=S.items.map((item,i)=>`
+    <div class="item-row ${item.checked?'checked':''}">
+      <div class="item-check ${item.checked?'done':''}" data-chk="${i}">${item.checked?'✓':''}</div>
+      <div class="item-info">
+        <div class="item-name">${item.emoji||'📦'} ${item.name}</div>
+        <div class="item-meta">${item.matched_ean?'<span style="color:var(--accent)">✓ Αντιστοιχίστηκε</span>':'Χωρίς αντιστοίχιση'}</div>
+      </div>
+      <div class="item-qty-ctrl">
+        <div class="qty-btn" data-q="${i}" data-d="-1">−</div>
+        <span class="qty-val">${item.quantity||1}</span>
+        <div class="qty-btn" data-q="${i}" data-d="1">+</div>
+      </div>
+      <button class="item-del" data-del="${i}">×</button>
+    </div>`).join('');
+  el.querySelectorAll('[data-chk]').forEach(e=>e.addEventListener('click',()=>toggleCheck(+e.dataset.chk)));
+  el.querySelectorAll('[data-q]').forEach(e=>e.addEventListener('click',()=>changeQty(+e.dataset.q,+e.dataset.d)));
+  el.querySelectorAll('[data-del]').forEach(e=>e.addEventListener('click',()=>delItem(+e.dataset.del)));
+}
+
+async function addItem(name,byEan=false) {
+  if(!name.trim()) return;
+  const q=name.toLowerCase();
+  const matched=byEan ? S.products.find(p=>p.ean===name) : (S.products.find(p=>p.name.toLowerCase()===q)||S.products.find(p=>p.name.toLowerCase().includes(q)));
+  const item={id:'i_'+Date.now(),basket_id:S.currentBasket.id,name:matched?matched.name:name,emoji:matched?.emoji||'📦',quantity:1,ean:byEan?name:null,matched_ean:matched?.ean||null,checked:false,created_at:new Date().toISOString()};
+  if(S.user?.isAnon){S.items.push(item);saveLoc();}
+  else{const{data}=await sb.from('basket_items').insert({basket_id:item.basket_id,name:item.name,quantity:1,ean:item.ean,matched_ean:item.matched_ean}).select().single();if(data)item.id=data.id;S.items.push(item);}
+  document.getElementById('addInput').value='';
+  hideSug(); renderItems();
+  toast(`"${item.name}" ✓`);
+}
+
+async function toggleCheck(i){S.items[i].checked=!S.items[i].checked;if(!S.user?.isAnon)await sb.from('basket_items').update({checked:S.items[i].checked}).eq('id',S.items[i].id);saveLoc();renderItems();}
+async function changeQty(i,d){S.items[i].quantity=Math.max(1,(S.items[i].quantity||1)+d);if(!S.user?.isAnon)await sb.from('basket_items').update({quantity:S.items[i].quantity}).eq('id',S.items[i].id);saveLoc();renderItems();}
+async function delItem(i){if(!S.user?.isAnon)await sb.from('basket_items').delete().eq('id',S.items[i].id);S.items.splice(i,1);saveLoc();renderItems();}
+function saveLoc(){localStorage.setItem('pw_items_'+S.currentBasket.id,JSON.stringify(S.items));}
+
+// ── SUGGESTIONS ─────────────────────────────────────────────
+function searchSug(q) {
+  if(q.length<2){hideSug();return;}
+  const seen=new Map();
+  S.products.forEach(p=>{const k=p.name.toLowerCase();if(k.includes(q.toLowerCase())&&(!seen.has(k)||seen.get(k).price>p.price))seen.set(k,p);});
+  const res=[...seen.values()].slice(0,5);
+  if(!res.length){hideSug();return;}
+  const box=document.getElementById('suggestions');
+  box.innerHTML=res.map((p,i)=>`<div class="suggestion-item" data-i="${i}"><span class="sug-emoji">${p.emoji||'📦'}</span><div class="sug-info"><div class="sug-name">${p.name}</div><div class="sug-brand">${p.brand||''}</div></div><span class="sug-price">${p.price.toFixed(2)}€+</span></div>`).join('');
+  box.querySelectorAll('.suggestion-item').forEach(el=>el.addEventListener('click',()=>addItem(res[+el.dataset.i].name)));
+  box.classList.add('visible');
+}
+function hideSug(){document.getElementById('suggestions').classList.remove('visible');}
+
+// ── OPTIMIZER ───────────────────────────────────────────────
+function runOptimizer() {
+  goPage('optimizer');
+  const items=S.items.filter(i=>!i.checked);
+  const el=document.getElementById('optContent');
+  if(!items.length){el.innerHTML=`<div class="empty-state"><div class="e-icon">📊</div><h3>Άδεια λίστα</h3><p>Πρόσθεσε προϊόντα πρώτα.</p></div>`;return;}
+  document.getElementById('optSubtitle').textContent=`${items.length} προϊόντα · Σύγκριση σε 4 αλυσίδες`;
+
+  // ── Match κάθε item ανά αλυσίδα ─────────────────────────────
+  const itemPrices=items.map(item=>{
+    const prices={};
+    CHAINS.forEach(chain=>{
+      const m=S.products.find(p=>p.chain===chain&&(
+        (item.matched_ean&&p.ean===item.matched_ean)||
+        p.name.toLowerCase()===item.name.toLowerCase()||
+        p.name.toLowerCase().includes(item.name.toLowerCase())));
+      if(m) prices[chain]={price:m.price*(item.quantity||1),product:m};
+    });
+    return{item,prices};
+  });
+
+  // ── Σενάριο 1: Μία αλυσίδα ──────────────────────────────────
+  const single=CHAINS.map(chain=>{
+    let total=0,found=0;
+    const bd=itemPrices.map(({item,prices})=>{
+      if(prices[chain]){total+=prices[chain].price;found++;return{name:item.name,price:prices[chain].price,ok:true};}
+      return{name:item.name,ok:false};
+    });
+    return{chain,total,found,bd,cov:Math.round(found/items.length*100)};
+  }).sort((a,b)=>b.found-a.found||a.total-b.total);
+
+  // ── Σενάριο 2: Split — φθηνότερο ανά προϊόν ─────────────────
+  let splitTotal=0;
+  const splitByChain={};
+  const missing=[];
+  itemPrices.forEach(({item,prices})=>{
+    const opts=Object.entries(prices).sort((a,b)=>a[1].price-b[1].price);
+    if(!opts.length){missing.push(item.name);return;}
+    const[bc,bp]=opts[0];
+    splitTotal+=bp.price;
+    if(!splitByChain[bc])splitByChain[bc]=[];
+    splitByChain[bc].push({name:item.name,price:bp.price,qty:item.quantity||1});
+  });
+  const bestSingle=single.find(s=>s.found>0);
+  const savingSplit=bestSingle?+(bestSingle.total-splitTotal).toFixed(2):0;
+
+  // ── Σενάριο 3: Minimum Stops ─────────────────────────────────
+  // Αλγόριθμος: για κάθε συνδυασμό N αλυσίδων (1,2,3,4),
+  // βρες τον συνδυασμό με το μικρότερο κόστος και λιγότερα stops.
+  // Threshold: αν η διαφορά vs pure split < THRESHOLD_PER_ITEM, συγχώνευε.
+  const THRESHOLD = 0.15; // €0.15 ανά προϊόν ανοχή για να αποφύγεις 2ο μαγαζί
+
+  function calcCombo(chainSubset) {
+    // Για κάθε item: πάρε την φθηνότερη τιμή μέσα στο subset
+    let total=0; const byChain={}; const miss=[];
+    itemPrices.forEach(({item,prices})=>{
+      const opts=Object.entries(prices)
+        .filter(([c])=>chainSubset.includes(c))
+        .sort((a,b)=>a[1].price-b[1].price);
+      if(!opts.length){miss.push(item.name);return;}
+      const[bc,bp]=opts[0];
+      total+=bp.price;
+      if(!byChain[bc])byChain[bc]=[];
+      byChain[bc].push({name:item.name,price:bp.price,qty:item.quantity||1});
+    });
+    return{total:+total.toFixed(2),byChain,missing:miss,stops:Object.keys(byChain).length};
+  }
+
+  // Δοκίμασε όλους τους συνδυασμούς 1-4 αλυσίδων
+  const combos=[];
+  for(let n=1;n<=CHAINS.length;n++){
+    // Generate combinations of size n
+    const gen=(arr,size)=>{
+      if(size===1)return arr.map(x=>[x]);
+      return arr.flatMap((x,i)=>gen(arr.slice(i+1),size-1).map(rest=>[x,...rest]));
+    };
+    gen(CHAINS,n).forEach(subset=>{
+      const r=calcCombo(subset);
+      combos.push({subset,...r});
+    });
+  }
+
+  // Βρες το Pareto front: για κάθε αριθμό stops, το φθηνότερο combo
+  const byStops={};
+  combos.forEach(c=>{
+    const k=c.stops;
+    if(!byStops[k]||c.total<byStops[k].total) byStops[k]=c;
+  });
+
+  // Ταξινόμηση ανά stops
+  const minStopOptions=Object.entries(byStops)
+    .sort((a,b)=>+a[0]-+b[0])
+    .map(([stops,data])=>({stops:+stops,...data}));
+
+  // Βρες τη "smart" σύσταση: ελάχιστα stops με αποδεκτό κόστος
+  // (κόστος <= φθηνότερο + THRESHOLD * αριθμός_προϊόντων)
+  const maxAcceptableCost = splitTotal + THRESHOLD * items.length;
+  const smartRec = minStopOptions.find(o=>o.total<=maxAcceptableCost) || minStopOptions[0];
+
+  // ── Render HTML ───────────────────────────────────────────────
+  const tabHtml=`
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="tabS">Μία Αλυσίδα</button>
+      <button class="mode-tab" id="tabM">Split Καλάθι</button>
+      <button class="mode-tab" id="tabL">Λιγότερα Μαγαζιά</button>
+    </div>`;
+
+  // Βοηθητική: render store block
+  const storeBlock=(chain,citems,total,isWinner=false)=>`
+    <div class="split-store">
+      <div class="split-store-header">
+        <div class="split-store-badge ${chain}">${CHAIN_ABBR[chain]}</div>
+        <div class="split-store-name">${CHAIN_LABELS[chain]}</div>
+        <div class="split-store-sub">${total.toFixed(2)}€</div>
+      </div>
+      ${citems.map(i=>`<div class="split-item">
+        <span class="split-item-name">${i.qty>1?i.qty+'× ':''}${i.name}</span>
+        <span class="split-item-price">${i.price.toFixed(2)}€</span>
+      </div>`).join('')}
+    </div>`;
+
+  const vSHtml=`<div id="vS">
+    <div class="totals-compare">
+      <h3>Σύγκριση Συνόλων</h3>
+      ${single.map((s,i)=>`<div class="total-row ${i===0?'best':''}">
+        <div class="total-store">
+          <span style="width:28px;height:28px;border-radius:6px;background:var(--${s.chain});display:inline-flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:white">${CHAIN_ABBR[s.chain]}</span>
+          ${CHAIN_LABELS[s.chain]} <span style="font-size:.7rem;color:var(--muted)">${s.cov}%</span>
+        </div>
+        <div style="text-align:right">
+          <div class="total-price">${s.found?s.total.toFixed(2)+'€':'—'}</div>
+          ${i>0&&single[0].found?`<div class="total-diff">+${(s.total-single[0].total).toFixed(2)}€</div>`:''}
+        </div>
+      </div>`).join('')}
+    </div>
+    ${single.filter(s=>s.found>0).map((s,i)=>`
+      <div class="store-result ${i===0?'winner':''}">
+        <div class="store-result-header">
+          <div class="store-badge ${s.chain}">${CHAIN_ABBR[s.chain]}</div>
+          <div class="store-result-info">
+            <div class="store-result-name">${CHAIN_LABELS[s.chain]}</div>
+            <div class="store-result-coverage">${s.found}/${items.length} (${s.cov}%)</div>
+            ${i===0?'<span class="winner-badge">✓ Φθηνότερο</span>':''}
+          </div>
+          <div class="store-total">${s.total.toFixed(2)}€</div>
+        </div>
+        <div class="store-items">
+          ${s.bd.map(b=>b.ok
+            ?`<div class="store-item-row"><span class="store-item-name">${b.name}</span><span class="store-item-price">${b.price.toFixed(2)}€</span></div>`
+            :`<div class="store-item-row"><span class="store-item-name">${b.name}</span><span class="store-item-notfound">Δεν βρέθηκε</span></div>`
+          ).join('')}
+        </div>
+      </div>`).join('')}
+  </div>`;
+
+  const vMHtml=`<div id="vM" style="display:none">
+    <div class="split-result">
+      <div class="split-header"><h3>🎯 Βέλτιστο Split</h3><span class="split-saving">${savingSplit>0?'Εξοικ. '+savingSplit.toFixed(2)+'€':''}</span></div>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:.85rem;color:var(--muted)">Σύνολο · ${Object.keys(splitByChain).length} μαγαζιά</span>
+        <span style="font-family:var(--mono);font-size:1.3rem;font-weight:800;color:var(--accent)">${splitTotal.toFixed(2)}€</span>
+      </div>
+      <div class="split-stores">
+        ${Object.entries(splitByChain).map(([chain,citems])=>
+          storeBlock(chain,citems,citems.reduce((s,i)=>s+i.price,0))).join('')}
+        ${missing.length?`<div style="font-size:.78rem;color:var(--muted);padding:8px 0">⚠️ Δεν βρέθηκαν: ${missing.join(', ')}</div>`:''}
+      </div>
+    </div>
+    <div class="totals-compare">
+      <h3>Split vs Μία Αλυσίδα</h3>
+      <div class="total-row best"><div class="total-store">🎯 Split (${Object.keys(splitByChain).length} μαγαζιά)</div><div class="total-price">${splitTotal.toFixed(2)}€</div></div>
+      ${single.filter(s=>s.found>0).map(s=>`<div class="total-row">
+        <div class="total-store">${CHAIN_LABELS[s.chain]}</div>
+        <div style="text-align:right">
+          <div class="total-price">${s.total.toFixed(2)}€</div>
+          ${s.total>splitTotal?`<div class="total-diff">+${(s.total-splitTotal).toFixed(2)}€</div>`:''}
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+
+  // Minimum stops view — δείχνει όλα τα Pareto σενάρια
+  const vLHtml=`<div id="vL" style="display:none">
+    <!-- Smart σύσταση -->
+    <div style="background:rgba(34,197,94,.07);border:1.5px solid var(--accent);border-radius:14px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:.72rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">✦ Έξυπνη Σύσταση</div>
+      <div style="font-size:.9rem;font-weight:700;margin-bottom:4px">
+        ${smartRec.stops} μαγαζ${smartRec.stops===1?'ί':'ιά'} · ${smartRec.total.toFixed(2)}€
+      </div>
+      <div style="font-size:.75rem;color:var(--muted)">
+        ${smartRec.total<=splitTotal+0.01
+          ? 'Ίδια τιμή με το πλήρες split — χωρίς επιπλέον μαγαζιά!'
+          : `+${(smartRec.total-splitTotal).toFixed(2)}€ vs πλήρες split · Εξοικονομείς ${smartRec.stops} επισκέψ${smartRec.stops===1?'η':'εις'}`}
+      </div>
+    </div>
+
+    <!-- Όλα τα Pareto σενάρια -->
+    <div class="totals-compare" style="margin-bottom:14px">
+      <h3>Σενάρια ανά αριθμό μαγαζιών</h3>
+      ${minStopOptions.map(o=>`
+        <div class="total-row ${o.stops===smartRec.stops?'best':''}">
+          <div class="total-store" style="gap:10px">
+            <span style="font-family:var(--mono);font-size:1rem;font-weight:800;color:${o.stops===smartRec.stops?'var(--accent)':'var(--text)'}">
+              ${o.stops}
+            </span>
+            <div>
+              <div style="font-size:.82rem;font-weight:600">${o.stops===1?'Ένα μαγαζί':o.stops+' μαγαζιά'}</div>
+              <div style="font-size:.7rem;color:var(--muted)">${o.subset.map(c=>CHAIN_LABELS[c]).join(' + ')}</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="total-price">${o.total.toFixed(2)}€</div>
+            ${o.total>splitTotal?`<div class="total-diff">+${(o.total-splitTotal).toFixed(2)}€ vs split</div>`:'<div style="font-size:.7rem;color:var(--accent)">= Βέλτιστο</div>'}
+          </div>
+        </div>`).join('')}
+      <div class="total-row">
+        <div class="total-store" style="gap:10px">
+          <span style="font-family:var(--mono);font-size:1rem;font-weight:800;color:var(--muted)">${Object.keys(splitByChain).length}</span>
+          <div>
+            <div style="font-size:.82rem;font-weight:600">Πλήρες Split</div>
+            <div style="font-size:.7rem;color:var(--muted)">Φθηνότερο ανά προϊόν</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="total-price" style="color:var(--offer)">${splitTotal.toFixed(2)}€</div>
+          <div style="font-size:.7rem;color:var(--offer)">Min κόστος</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ανάλυση smart rec -->
+    <div class="split-result">
+      <div class="split-header">
+        <h3>📍 ${smartRec.stops} μαγαζ${smartRec.stops===1?'ί':'ιά'} · Ανάλυση</h3>
+        <span class="split-saving">${smartRec.total.toFixed(2)}€</span>
+      </div>
+      <div class="split-stores">
+        ${Object.entries(smartRec.byChain).map(([chain,citems])=>
+          storeBlock(chain,citems,citems.reduce((s,i)=>s+i.price,0))).join('')}
+        ${smartRec.missing.length?`<div style="font-size:.78rem;color:var(--muted);padding:8px 0">⚠️ Δεν βρέθηκαν: ${smartRec.missing.join(', ')}</div>`:''}
+      </div>
+    </div>
+
+    <!-- Slider για threshold -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
+      <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+        ⚙️ Ανοχή κόστους ανά προϊόν
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <input type="range" id="thresholdSlider" min="0" max="50" value="15" step="5"
+          style="flex:1;accent-color:var(--accent)">
+        <span id="thresholdVal" style="font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--accent);min-width:40px">0.15€</span>
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:6px">
+        Πόσο επιπλέον ανά προϊόν αποδέχεσαι για να πας σε λιγότερα μαγαζιά
+      </div>
+      <div id="thresholdResult" style="margin-top:10px;font-size:.82rem;font-weight:600;color:var(--text)"></div>
+    </div>
+  </div>`;
+
+  el.innerHTML = tabHtml + vSHtml + vMHtml + vLHtml;
+
+  // Tab switching
+  const tabs={S:'vS',M:'vM',L:'vL'};
+  Object.keys(tabs).forEach(t=>{
+    document.getElementById('tab'+t).addEventListener('click',()=>{
+      Object.keys(tabs).forEach(k=>{
+        document.getElementById('v'+k).style.display=k===t?'block':'none';
+        document.getElementById('tab'+k).classList.toggle('active',k===t);
+      });
+    });
+  });
+
+  // Threshold slider — live recalculation
+  const slider=document.getElementById('thresholdSlider');
+  const thVal=document.getElementById('thresholdVal');
+  const thRes=document.getElementById('thresholdResult');
+
+  function updateThreshold() {
+    const th=+slider.value/100;
+    thVal.textContent=th.toFixed(2)+'€';
+    const maxCost=splitTotal+th*items.length;
+    const rec=minStopOptions.find(o=>o.total<=maxCost)||minStopOptions[minStopOptions.length-1];
+    const extra=+(rec.total-splitTotal).toFixed(2);
+    thRes.innerHTML=`→ <strong>${rec.stops} μαγαζ${rec.stops===1?'ί':'ιά'}</strong> · ${rec.total.toFixed(2)}€`+
+      (extra>0?` <span style="color:var(--muted)">(+${extra}€ vs split)</span>`:`<span style="color:var(--accent)"> ✓ Βέλτιστο</span>`);
+  }
+  slider?.addEventListener('input',updateThreshold);
+  updateThreshold();
+}
+
+// ── SCANNER ─────────────────────────────────────────────────
+async function startScan() {
+  document.getElementById('scannerOverlay').classList.add('open');
+  try {
+    const {BrowserMultiFormatReader}=await import('https://unpkg.com/@zxing/library@latest/esm/index.js');
+    const cr=new BrowserMultiFormatReader();
+    S.codeReader=cr;
+    const devs=await BrowserMultiFormatReader.listVideoInputDevices();
+    const cam=devs.find(d=>d.label.toLowerCase().includes('back'))||devs[0];
+    await cr.decodeFromVideoDevice(cam?.deviceId,'scannerVideo',(res)=>{if(res){stopScan();addItem(res.getText(),true);}});
+  } catch(e){toast('Σφάλμα κάμερας');stopScan();}
+}
+function stopScan(){S.codeReader?.reset();S.codeReader=null;document.getElementById('scannerOverlay').classList.remove('open');}
+
+// ── UI HELPERS ───────────────────────────────────────────────
+function goPage(name) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name)?.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const map={baskets:'baskets',detail:'baskets',optimizer:'optimizer'};
+  document.querySelector(`.nav-item[data-page="${map[name]||name}"]`)?.classList.add('active');
+}
+function showModal(title,ph,def,cb) {
+  document.getElementById('modalTitle').textContent=title;
+  const inp=document.getElementById('modalInput');inp.placeholder=ph;inp.value=def;
+  document.getElementById('modalOverlay').classList.add('open');inp.focus();
+  const close=()=>document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('btnModalOk').onclick=()=>{const v=inp.value.trim();if(v){close();cb(v);}};
+  document.getElementById('btnModalCancel').onclick=close;
+  inp.onkeydown=e=>{if(e.key==='Enter')document.getElementById('btnModalOk').onclick();};
+}
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2500);}
+
+// ── DEMO DATA ────────────────────────────────────────────────
+function demo(){
+  const chains=['ab','sklavenitis','lidl','mymarket'];
+  const items=[['Γάλα Φρέσκο 3.5%','ΔΕΛΤΑ','🥛',1.89],['Ψωμί Τοστ 500g',"HARRY'S",'🍞',1.49],['Σπαγγέτι Νο7','BARILLA','🍝',1.09],['Ελαιόλαδο ΕΠ 750ml','ΕΛΑΪΣ','🫒',6.49],['Τόνος σε Νερό','JOHN WEST','🐟',1.29],['Nescafé 200g','NESTLE','☕',3.49],['Coca-Cola 1.5lt','COCA-COLA','🥤',1.89],['Νερό 1.5lt','ΑΥΡΑ','💧',0.59],['Απορρυπαντικό 3kg','ARIEL','🧼',9.99],['Φέτα ΠΟΠ','ΔΩΔΩΝΗ','🧀',5.49]];
+  const res=[];
+  items.forEach(([name,brand,emoji,base],i)=>{
+    chains.forEach(chain=>{
+      const v=0.88+Math.random()*.28;
+      res.push({chain,name,brand,emoji,price:+(base*v).toFixed(2),ean:`590${String(i).padStart(10,'0')}`,is_offer:Math.random()<.25,url:'#'});
+    });
+  });
+  return res;
+}
+
+// ── BIND ─────────────────────────────────────────────────────
+function bindAll() {
+  document.getElementById('btnSendOtp').addEventListener('click',sendOtp);
+  document.getElementById('btnVerifyOtp')?.addEventListener('click',verifyOtp);
+  document.getElementById('btnSkipAuth').addEventListener('click',skipAuth);
+  document.getElementById('btnNewBasket').addEventListener('click',promptNew);
+  document.getElementById('btnBack').addEventListener('click',()=>goPage('baskets'));
+  document.getElementById('btnBackOpt').addEventListener('click',()=>goPage('detail'));
+  document.getElementById('btnOptimize').addEventListener('click',runOptimizer);
+  document.getElementById('btnAdd').addEventListener('click',()=>addItem(document.getElementById('addInput').value));
+  document.getElementById('addInput').addEventListener('input',e=>searchSug(e.target.value));
+  document.getElementById('addInput').addEventListener('keydown',e=>{if(e.key==='Enter')addItem(e.target.value);});
+  document.getElementById('btnScan').addEventListener('click',startScan);
+  document.getElementById('btnCloseScanner').addEventListener('click',stopScan);
+  document.getElementById('btnSync').addEventListener('click',()=>{loadBaskets();toast('Sync ✓');});
+  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>{const p=n.dataset.page;if(p==='pricewatch'){location.href='index.html';return;}if(p==='optimizer'){runOptimizer();return;}goPage(p);}));
+  document.addEventListener('click',e=>{if(!e.target.closest('.suggestions')&&!e.target.closest('.add-input-wrap'))hideSug();});
+}
+
+init();
+</script>
+</body>
+</html>
