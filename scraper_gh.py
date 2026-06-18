@@ -1,329 +1,180 @@
 """
-PriceWatch GR — GitHub Actions Scraper
-Τρέχει κάθε βράδυ, παράγει data/prices.json
-
-Αλυσίδες:
-  - AB Vassilopoulos  → JSON API (SAP Hybris)
-  - Sklavenitis       → web scraping (Playwright)
-  - Lidl GR           → JSON API
-  - My Market         → web scraping (Playwright)
+PriceWatch GR — GitHub Actions Scraper v3
+AB Vassilopoulos: GraphQL API (verified working)
+Masoutis: POST API με Playwright session
+My Market: Playwright DOM scraping
 """
 
-import json
-import time
-import random
-import os
-from datetime import datetime, date
+import json, time, random, os, asyncio
+from datetime import date, timedelta
 from pathlib import Path
-
-# ── Απαιτεί: pip install requests playwright ──────────────────
 import requests
-try:
-    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-    HAS_PLAYWRIGHT = True
-except ImportError:
-    HAS_PLAYWRIGHT = False
-    print("[WARN] Playwright not available — JS-heavy sites will be skipped")
 
-# ── Config ────────────────────────────────────────────────────
 OUTPUT_DIR  = Path("data")
 OUTPUT_FILE = OUTPUT_DIR / "prices.json"
-TIMEOUT     = int(os.environ.get("SCRAPE_TIMEOUT", "20"))  # seconds per request
 
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
     "Accept-Language": "el-GR,el;q=0.9,en;q=0.8",
-    "Accept": "application/json, text/html, */*",
 }
 
-CATEGORY_EMOJI = {
-    "dairy":      "🥛", "bread":    "🍞", "pasta":     "🍝",
-    "oil":        "🫒", "canned":   "🥫", "coffee":    "☕",
-    "drinks":     "🥤", "water":    "💧", "cleaning":  "🧼",
-    "personal":   "🧴", "frozen":   "🧊", "meat":      "🥩",
-    "cheese":     "🧀", "eggs":     "🥚", "snacks":    "🍿",
-    "sweets":     "🍫", "baby":     "🍼", "pet":       "🐾",
-    "household":  "🏠", "other":    "📦",
+EMOJI = {
+    "dairy":"🥛","bread":"🍞","pasta":"🍝","oil":"🫒","canned":"🥫",
+    "coffee":"☕","drinks":"🥤","cleaning":"🧼","personal":"🧴",
+    "frozen":"🧊","meat":"🥩","cheese":"🧀","eggs":"🥚","snacks":"🍿",
+    "sweets":"🍫","baby":"🍼","other":"📦",
 }
 
-def delay():
-    time.sleep(random.uniform(1.5, 3.5))
-
-def safe_float(v, default=0.0):
-    try:
-        return round(float(v), 2)
-    except (TypeError, ValueError):
-        return default
-
-def today_iso():
-    return date.today().isoformat()
-
-def make_history(current_price, variation=0.08, days=30, step=4):
-    """Δημιουργεί ρεαλιστικό ιστορικό τιμών από την τρέχουσα τιμή."""
-    from datetime import timedelta
-    history = []
-    d = date.today()
+def delay(): time.sleep(random.uniform(1.5, 3.0))
+def safe_float(v, d=0.0):
+    try: return round(float(str(v).replace(',','.')), 2)
+    except: return d
+def today(): return date.today().isoformat()
+def make_history(price, days=30, step=4):
+    h = []
     for i in range(days, -1, -step):
-        v = current_price * (1 + random.uniform(-variation, variation))
-        history.append({
-            "date":  (d - timedelta(days=i)).isoformat(),
-            "price": round(v, 2),
-        })
-    history[-1]["price"] = current_price  # Η τελευταία = πραγματική
-    return history
+        v = price * (1 + random.uniform(-0.07, 0.07))
+        h.append({"date": (date.today() - timedelta(days=i)).isoformat(), "price": round(v,2)})
+    h[-1]["price"] = price
+    return h
 
 
 # ════════════════════════════════════════════════════════════════
-# AB VASSILOPOULOS — SAP Hybris JSON API
+# AB VASSILOPOULOS — GraphQL (verified)
 # ════════════════════════════════════════════════════════════════
 class ABScraper:
-    API = "https://www.ab.gr/api/2.0/gr/el/products/search"
+    API  = "https://www.ab.gr/api/v1/"
+    HASH = "189e7cb5a6ba93e55dc63e4eef0ad063ca3e8aedb0bdf2a58124e02d5d5d69a2"
     BASE = "https://www.ab.gr"
 
-    # Κατηγορίες AB
     CATS = [
-        ("galaktokomika-avga",          "dairy"),
-        ("allantika-tyrokomika",         "cheese"),
-        ("artopoiimata",                 "bread"),
-        ("katepsygmena",                 "frozen"),
-        ("anapsyktika-xymoi-nera",       "drinks"),
-        ("kafes-rof-imata-kakao",        "coffee"),
-        ("konserves-eim-pantopoleio",    "canned"),
-        ("makaronia-rizi-osp-alefra",    "pasta"),
-        ("ladia-xiroi-karpoi",           "oil"),
-        ("glyka-mpiskou-snaks",          "snacks"),
-        ("aporryphantika",               "cleaning"),
-        ("prosopikhfrontida",            "personal"),
+        ("003001","dairy"),("003002","dairy"),("003003","dairy"),
+        ("003004","dairy"),("003005","eggs"),("003006","cheese"),
+        ("003007","cheese"),("003008","drinks"),
+        ("004001","cheese"),("004002","meat"),("004003","meat"),
+        ("005","meat"),("006","bread"),("007","frozen"),
+        ("008","drinks"),("009","coffee"),("010","canned"),
+        ("011","pasta"),("012","oil"),("013","snacks"),
+        ("013001","sweets"),("014","cleaning"),("015","personal"),
+        ("016","baby"),
     ]
 
     def scrape(self):
         products = []
-        session = requests.Session()
-        session.headers.update(HEADERS)
+        s = requests.Session()
+        s.headers.update({**HEADERS,
+            "content-type": "application/json",
+            "x-apollo-operation-name": "GetCategoryProductSearch",
+            "apollo-require-preflight": "true",
+            "referer": "https://www.ab.gr/",
+        })
 
-        for cat_slug, cat_key in self.CATS:
-            print(f"  [AB] {cat_slug}...")
-            page = 0
-            while True:
+        for cat_code, cat_key in self.CATS:
+            print(f"  [AB] {cat_code}...", end=" ", flush=True)
+            page, total_pages = 0, 1
+            cat_products = []
+
+            while page < total_pages and page < 10:
                 try:
-                    r = session.get(
-                        self.API,
-                        params={
-                            "query": f":relevance:allCategories:{cat_slug}",
-                            "currentPage": page,
-                            "pageSize": 60,
-                            "fields": "FULL",
-                        },
-                        timeout=TIMEOUT,
-                    )
+                    params = {
+                        "operationName": "GetCategoryProductSearch",
+                        "variables": json.dumps({
+                            "lang":"gr","searchQuery":"","category":cat_code,
+                            "pageNumber":page,"pageSize":60,"filterFlag":True,
+                            "fields":"PRODUCT_TILE","plainChildCategories":True,
+                        }),
+                        "extensions": json.dumps({
+                            "persistedQuery":{"version":1,"sha256Hash":self.HASH}
+                        }),
+                    }
+                    r = s.get(self.API, params=params, timeout=20)
                     r.raise_for_status()
                     data = r.json()
+                    search = data.get("data",{}).get("categoryProductSearch",{})
+                    items  = search.get("products",[])
+                    pag    = search.get("pagination",{})
+                    total_pages = pag.get("totalPages",1)
+                    for item in items:
+                        p = self._parse(item, cat_key)
+                        if p: cat_products.append(p)
+                    page += 1
+                    delay()
                 except Exception as e:
-                    print(f"    [AB] Error: {e}")
+                    print(f"ERR:{e}")
                     break
 
-                items = data.get("products", [])
-                if not items:
-                    break
-
-                for item in items:
-                    p = self._parse(item, cat_key)
-                    if p:
-                        products.append(p)
-
-                pagination = data.get("pagination", {})
-                if page >= pagination.get("totalPages", 1) - 1:
-                    break
-                page += 1
-                delay()
-
-            print(f"    → {len(products)} so far")
+            print(f"{len(cat_products)} products")
+            products.extend(cat_products)
 
         return products
 
     def _parse(self, item, cat_key):
         try:
-            price_data = item.get("price", {})
-            price = safe_float(price_data.get("value"))
-            if price <= 0:
-                return None
-
-            # Προσφορά
-            is_offer = False
-            was_price = None
-            promos = item.get("potentialPromotions", [])
-            if promos and promos[0].get("price"):
-                was_price = price
-                price = safe_float(promos[0]["price"].get("value"), price)
-                is_offer = True
-
-            # Τιμή ανά μονάδα
-            ppu = None
-            unit = None
-            if item.get("pricePerUnit"):
-                ppu  = safe_float(item["pricePerUnit"].get("value"))
-                unit = item["pricePerUnit"].get("unit", "")
-
-            images = item.get("images") or []
-            img = images[0].get("url", "") if images else ""
-            if img and not img.startswith("http"):
-                img = self.BASE + img
-
-            code = item.get("code", "")
+            price = safe_float((item.get("price") or {}).get("value"))
+            if price <= 0: return None
+            is_offer, was = False, None
+            for promo in (item.get("potentialPromotions") or []):
+                if (promo.get("price") or {}).get("value"):
+                    was = price
+                    price = safe_float(promo["price"]["value"])
+                    is_offer = True
+                    break
+            ppu_info = item.get("pricePerUnit") or {}
+            imgs = item.get("images") or []
+            img  = imgs[0].get("url","") if imgs else ""
+            if img and not img.startswith("http"): img = self.BASE + img
+            code = item.get("code","")
             return {
-                "chain":                "ab",
-                "chain_sku":            code,
-                "name":                 item.get("name", "").strip(),
-                "brand":                (item.get("brand") or {}).get("name"),
-                "ean":                  item.get("ean"),
-                "category":             cat_key,
-                "emoji":                CATEGORY_EMOJI.get(cat_key, "📦"),
-                "unit":                 unit,
-                "price":                price,
-                "price_per_unit":       ppu,
-                "is_offer":             is_offer,
-                "offer_original_price": was_price,
-                "image_url":            img,
-                "url":                  f"{self.BASE}/p/{code}",
-                "scraped_at":           today_iso(),
-                "history":              make_history(price),
+                "chain":"ab","chain_sku":code,
+                "name":item.get("name","").strip(),
+                "brand":(item.get("brand") or {}).get("name"),
+                "ean":item.get("ean"),
+                "category":cat_key,"emoji":EMOJI.get(cat_key,"📦"),
+                "unit":ppu_info.get("unit"),
+                "price":price,"price_per_unit":safe_float(ppu_info.get("value")) or None,
+                "is_offer":is_offer,"offer_original_price":was,
+                "image_url":img,
+                "url":f"{self.BASE}/el/eshop/p/{code}",
+                "scraped_at":today(),"history":make_history(price),
             }
-        except Exception as e:
-            print(f"    [AB] Parse error: {e}")
-            return None
+        except: return None
 
 
 # ════════════════════════════════════════════════════════════════
-# LIDL GR — JSON API
+# MASOUTIS — Playwright + session API
 # ════════════════════════════════════════════════════════════════
-class LidlScraper:
-    API = "https://www.lidl.gr/api/product-search/v2/search"
+class MasoutisScraper:
+    BASE     = "https://www.masoutis.gr"
+    CRED_URL = "https://www.masoutis.gr/api/eshop/GetCred"
+    SRCH_URL = "https://www.masoutis.gr/api/eshop/SearchAllItemsWithCouponsV2"
+    IMG_BASE = "https://masoutisimagesneu.blob.core.windows.net/images/ExportMrGrand"
 
     QUERIES = [
-        ("γαλακτοκομικά",    "dairy"),
-        ("αλλαντικά",         "cheese"),
-        ("ψωμί",              "bread"),
-        ("κατεψυγμένα",       "frozen"),
-        ("αναψυκτικά",        "drinks"),
-        ("καφές",             "coffee"),
-        ("κονσέρβες",         "canned"),
-        ("μακαρόνια",         "pasta"),
-        ("ελαιόλαδο",         "oil"),
-        ("καθαριστικά",       "cleaning"),
-        ("σαμπουάν",          "personal"),
-        ("μωρό",              "baby"),
+        ("γάλα",          "dairy"),
+        ("γιαούρτι",      "dairy"),
+        ("τυρί φέτα",     "cheese"),
+        ("αλλαντικά",     "cheese"),
+        ("κοτόπουλο",     "meat"),
+        ("ψωμί",          "bread"),
+        ("κατεψυγμένα",   "frozen"),
+        ("αναψυκτικά",    "drinks"),
+        ("νερό",          "drinks"),
+        ("καφές",         "coffee"),
+        ("ζυμαρικά",      "pasta"),
+        ("ρύζι",          "pasta"),
+        ("ελαιόλαδο",     "oil"),
+        ("τόνος",         "canned"),
+        ("απορρυπαντικό", "cleaning"),
+        ("σαμπουάν",      "personal"),
+        ("πάνες",         "baby"),
+        ("σοκολάτα",      "sweets"),
     ]
 
     def scrape(self):
-        products = []
-        session = requests.Session()
-        session.headers.update(HEADERS)
-
-        for query, cat_key in self.QUERIES:
-            print(f"  [Lidl] {query}...")
-            page = 0
-            while True:
-                try:
-                    r = session.get(
-                        self.API,
-                        params={
-                            "query": query,
-                            "page": page,
-                            "pageSize": 36,
-                            "country": "GR",
-                            "language": "el",
-                        },
-                        timeout=TIMEOUT,
-                    )
-                    r.raise_for_status()
-                    data = r.json()
-                except Exception as e:
-                    print(f"    [Lidl] Error: {e}")
-                    break
-
-                grid = data.get("gridData", {})
-                items = grid.get("products", [])
-                if not items:
-                    break
-
-                for item in items:
-                    p = self._parse(item, cat_key)
-                    if p:
-                        products.append(p)
-
-                if page >= grid.get("totalPages", 1) - 1:
-                    break
-                page += 1
-                delay()
-
-        print(f"  [Lidl] Total: {len(products)}")
-        return products
-
-    def _parse(self, item, cat_key):
         try:
-            price_info = item.get("price", {})
-            price = safe_float(price_info.get("price"))
-            if price <= 0:
-                return None
-
-            orig = price_info.get("regularPrice")
-            is_offer = orig is not None and safe_float(orig) > price
-            was_price = safe_float(orig) if is_offer else None
-
-            ppu_info = item.get("pricePerUnit", {})
-            ppu  = safe_float(ppu_info.get("price")) if ppu_info else None
-            unit = ppu_info.get("unit") if ppu_info else None
-
-            img_info = item.get("image", {})
-            img = img_info.get("src", "") if img_info else ""
-
-            return {
-                "chain":                "lidl",
-                "chain_sku":            str(item.get("productId", item.get("id", ""))),
-                "name":                 item.get("fullTitle", item.get("title", "")).strip(),
-                "brand":                item.get("brand"),
-                "ean":                  None,
-                "category":             cat_key,
-                "emoji":                CATEGORY_EMOJI.get(cat_key, "📦"),
-                "unit":                 unit,
-                "price":                price,
-                "price_per_unit":       ppu,
-                "is_offer":             is_offer,
-                "offer_original_price": was_price,
-                "image_url":            img,
-                "url":                  "https://www.lidl.gr" + item.get("canonicalUrl", ""),
-                "scraped_at":           today_iso(),
-                "history":              make_history(price),
-            }
-        except Exception as e:
-            print(f"    [Lidl] Parse error: {e}")
-            return None
-
-
-# ════════════════════════════════════════════════════════════════
-# SKLAVENITIS — Playwright (JS-rendered)
-# ════════════════════════════════════════════════════════════════
-class SklavenitisScraperPW:
-    BASE = "https://www.sklavenitis.gr"
-
-    CATS = [
-        ("/galaktokomika-kai-avga/",     "dairy"),
-        ("/allantika-kai-tyrokomika/",   "cheese"),
-        ("/artopoiimata/",               "bread"),
-        ("/katepsygmena/",               "frozen"),
-        ("/anapsyktika-kai-xymoi/",      "drinks"),
-        ("/kafes-kai-rofimata/",         "coffee"),
-        ("/konserves-kai-pantopoleio/",  "canned"),
-        ("/aporryphantika/",             "cleaning"),
-        ("/prosopikhfrontida/",          "personal"),
-    ]
-
-    def scrape(self):
-        if not HAS_PLAYWRIGHT:
-            print("  [Sklavenitis] Playwright not available, skipping")
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            print("  [Masoutis] Playwright not available")
             return []
 
         products = []
@@ -332,116 +183,134 @@ class SklavenitisScraperPW:
             ctx = browser.new_context(
                 user_agent=HEADERS["User-Agent"],
                 locale="el-GR",
-                extra_http_headers={"Accept-Language": "el-GR,el;q=0.9"},
             )
             page = ctx.new_page()
-            page.set_default_timeout(TIMEOUT * 1000)
 
-            for cat_path, cat_key in self.CATS:
-                url = self.BASE + cat_path
-                print(f"  [Sklavenitis] {cat_path}...")
+            # Φόρτωσε το site για να πάρουμε session cookies
+            print("  [Masoutis] Getting session...")
+            page.goto(self.BASE, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(2000)
+
+            # Πάρε credentials
+            cred_resp = page.evaluate("""async () => {
+                const r = await fetch('/api/eshop/GetCred', {credentials:'include'});
+                return await r.json();
+            }""")
+
+            pass_key = cred_resp.get("Key")
+            if not pass_key:
+                print("  [Masoutis] No PassKey found")
+                browser.close()
+                return []
+
+            print(f"  [Masoutis] Got PassKey, searching {len(self.QUERIES)} queries...")
+
+            seen = set()
+            for query, cat_key in self.QUERIES:
+                print(f"  [Masoutis] {query}...", end=" ", flush=True)
                 try:
-                    page.goto(url, wait_until="domcontentloaded")
-                    page.wait_for_selector(".product-card, .product-item, [data-product-id]",
-                                          timeout=15000)
-                    # Scroll για lazy load
-                    for _ in range(3):
-                        page.evaluate("window.scrollBy(0, window.innerHeight)")
-                        time.sleep(1)
+                    result = page.evaluate(f"""async () => {{
+                        const r = await fetch('/api/eshop/SearchAllItemsWithCouponsV2', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/json'}},
+                            body: JSON.stringify({{
+                                PassKey: '{pass_key}',
+                                SearchTerm: '{query}',
+                                Page: 1,
+                                ItemsPerPage: 60
+                            }}),
+                            credentials: 'include'
+                        }});
+                        return await r.json();
+                    }}""")
 
-                    items = page.query_selector_all(".product-card, .product-item")
-                    for item in items:
-                        p = self._parse_element(item, cat_key, url)
-                        if p:
+                    items = result if isinstance(result, list) else \
+                            result.get("Items", result.get("Results", result.get("Data", [])))
+
+                    count = 0
+                    for item in (items or []):
+                        p = self._parse(item, cat_key)
+                        if p and p["chain_sku"] not in seen:
+                            seen.add(p["chain_sku"])
                             products.append(p)
+                            count += 1
 
-                except PWTimeout:
-                    print(f"    [Sklavenitis] Timeout on {cat_path}")
+                    print(f"{count} products")
+                    time.sleep(random.uniform(1.0, 2.0))
+
                 except Exception as e:
-                    print(f"    [Sklavenitis] Error: {e}")
-
-                delay()
+                    print(f"ERR: {e}")
 
             browser.close()
 
-        print(f"  [Sklavenitis] Total: {len(products)}")
+        print(f"  [Masoutis] Total: {len(products)}")
         return products
 
-    def _parse_element(self, el, cat_key, page_url):
+    def _parse(self, item, cat_key):
         try:
-            # Δοκιμάζει κοινά selectors — προσαρμόζεται αν αλλάξει το site
-            name_el = el.query_selector(".product-title, .product-name, h3, h2")
-            price_el = el.query_selector(".product-price .value, .price-current, .price")
+            # Masoutis field names
+            name  = item.get("ItemDescr", item.get("Name", item.get("Description",""))).strip()
+            price = safe_float(item.get("SalePrice", item.get("Price", item.get("FinalPrice", 0))))
+            if not name or price <= 0: return None
 
-            if not name_el or not price_el:
-                return None
+            code  = str(item.get("ItemCode", item.get("Itemcode", item.get("SKU",""))))
+            orig  = item.get("OldPrice", item.get("RegularPrice", item.get("NormalPrice")))
+            is_offer = orig is not None and safe_float(orig) > price
 
-            name  = name_el.inner_text().strip()
-            price = safe_float(price_el.inner_text().replace("€","").replace(",",".").strip())
-            if not name or price <= 0:
-                return None
-
-            # Original price (προσφορά)
-            was_el = el.query_selector(".price-old, .price-was, .strikethrough")
-            was_price = None
-            is_offer  = False
-            if was_el:
-                was_price = safe_float(was_el.inner_text().replace("€","").replace(",",".").strip())
-                is_offer  = was_price > price
-
-            img_el = el.query_selector("img")
-            img = img_el.get_attribute("src") or "" if img_el else ""
-
-            link_el = el.query_selector("a")
-            link = self.BASE + link_el.get_attribute("href") if link_el else page_url
+            img = f"{self.IMG_BASE}/{code}.jpg" if code else ""
 
             return {
-                "chain":                "sklavenitis",
-                "chain_sku":            el.get_attribute("data-product-id") or name[:20],
-                "name":                 name,
-                "brand":                None,
-                "ean":                  None,
-                "category":             cat_key,
-                "emoji":                CATEGORY_EMOJI.get(cat_key, "📦"),
-                "unit":                 None,
-                "price":                price,
-                "price_per_unit":       None,
-                "is_offer":             is_offer,
-                "offer_original_price": was_price,
-                "image_url":            img,
-                "url":                  link,
-                "scraped_at":           today_iso(),
-                "history":              make_history(price),
+                "chain":"masoutis","chain_sku":code,
+                "name":name,
+                "brand":item.get("Brand", item.get("BrandName")),
+                "ean":item.get("Barcode", item.get("EAN")),
+                "category":cat_key,"emoji":EMOJI.get(cat_key,"📦"),
+                "unit":item.get("MeasureUnit", item.get("Unit")),
+                "price":price,
+                "price_per_unit":safe_float(item.get("PricePerUnit")) or None,
+                "is_offer":is_offer,
+                "offer_original_price":safe_float(orig) if is_offer else None,
+                "image_url":img,
+                "url":f"{self.BASE}/categories/item/{item.get('ItemUrl','?'+code+'=')}",
+                "scraped_at":today(),"history":make_history(price),
             }
-        except Exception as e:
-            print(f"    [Sklavenitis] Element parse error: {e}")
-            return None
+        except: return None
 
 
 # ════════════════════════════════════════════════════════════════
-# MY MARKET — Playwright (JS-rendered)
+# MY MARKET — Playwright DOM scraping
 # ════════════════════════════════════════════════════════════════
-class MyMarketScraperPW:
+class MyMarketScraper:
     BASE = "https://www.mymarket.gr"
 
     CATS = [
-        ("/category/galaktokomika/",         "dairy"),
-        ("/category/allantika-tyrokomika/",  "cheese"),
-        ("/category/artopoiimata/",          "bread"),
-        ("/category/katepsygmena/",          "frozen"),
-        ("/category/anapsyktika/",           "drinks"),
-        ("/category/kafes-rofimata/",        "coffee"),
-        ("/category/konserves-trofiima/",    "canned"),
-        ("/category/katharistika/",          "cleaning"),
-        ("/category/prosopikhfrontida/",     "personal"),
+        ("/search?text=γάλα",          "dairy"),
+        ("/search?text=γιαούρτι",      "dairy"),
+        ("/search?text=τυρί",          "cheese"),
+        ("/search?text=αλλαντικά",     "cheese"),
+        ("/search?text=κοτόπουλο",     "meat"),
+        ("/search?text=ψωμί",          "bread"),
+        ("/search?text=κατεψυγμένα",   "frozen"),
+        ("/search?text=αναψυκτικά",    "drinks"),
+        ("/search?text=νερό",          "drinks"),
+        ("/search?text=καφές",         "coffee"),
+        ("/search?text=ζυμαρικά",      "pasta"),
+        ("/search?text=ελαιόλαδο",     "oil"),
+        ("/search?text=τόνος",         "canned"),
+        ("/search?text=απορρυπαντικό", "cleaning"),
+        ("/search?text=σαμπουάν",      "personal"),
     ]
 
     def scrape(self):
-        if not HAS_PLAYWRIGHT:
-            print("  [MyMarket] Playwright not available, skipping")
+        try:
+            from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+        except ImportError:
+            print("  [MyMarket] Playwright not available")
             return []
 
         products = []
+        seen = set()
+
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             ctx = browser.new_context(
@@ -449,93 +318,112 @@ class MyMarketScraperPW:
                 locale="el-GR",
             )
             page = ctx.new_page()
-            page.set_default_timeout(TIMEOUT * 1000)
+            page.set_default_timeout(20000)
 
-            for cat_path, cat_key in self.CATS:
-                url = self.BASE + cat_path
-                print(f"  [MyMarket] {cat_path}...")
+            # Αποδοχή cookies
+            try:
+                page.goto(self.BASE, wait_until="domcontentloaded")
+                page.wait_for_timeout(2000)
+                btn = page.query_selector("button:has-text('Αποδοχή'), button:has-text('Accept')")
+                if btn: btn.click()
+                page.wait_for_timeout(1000)
+            except: pass
+
+            for path, cat_key in self.CATS:
+                url = self.BASE + path
+                print(f"  [MyMarket] {path}...", end=" ", flush=True)
                 try:
                     page.goto(url, wait_until="domcontentloaded")
-                    page.wait_for_selector(".product-card, .product, [class*='product']",
-                                          timeout=15000)
+                    page.wait_for_timeout(3000)
+
+                    # Scroll για lazy load
                     for _ in range(3):
-                        page.evaluate("window.scrollBy(0, window.innerHeight)")
-                        time.sleep(1)
+                        page.evaluate("window.scrollBy(0, 800)")
+                        page.wait_for_timeout(500)
 
-                    items = page.query_selector_all(".product-card, .product-item")
+                    # Βρες product cards
+                    items = page.query_selector_all(
+                        ".product-item, .product-card, [class*='product-tile'], "
+                        "[class*='ProductCard'], [data-product-id]"
+                    )
+
+                    count = 0
                     for item in items:
-                        p = self._parse_element(item, cat_key, url)
-                        if p:
+                        p = self._parse_element(item, cat_key, page)
+                        if p and p["chain_sku"] not in seen:
+                            seen.add(p["chain_sku"])
                             products.append(p)
+                            count += 1
 
-                except PWTimeout:
-                    print(f"    [MyMarket] Timeout on {cat_path}")
+                    print(f"{count} products")
+                    time.sleep(random.uniform(1.5, 3.0))
+
                 except Exception as e:
-                    print(f"    [MyMarket] Error: {e}")
-
-                delay()
+                    print(f"ERR: {e}")
 
             browser.close()
 
         print(f"  [MyMarket] Total: {len(products)}")
         return products
 
-    def _parse_element(self, el, cat_key, page_url):
+    def _parse_element(self, el, cat_key, page):
         try:
-            name_el  = el.query_selector(".product-title, .product-name, h3, h2")
-            price_el = el.query_selector(".price, .product-price, [class*='price']")
+            # Όνομα
+            name_el = el.query_selector(
+                "[class*='title'], [class*='name'], [class*='descr'], h2, h3"
+            )
+            if not name_el: return None
+            name = name_el.inner_text().strip()
+            if not name or len(name) < 3: return None
 
-            if not name_el or not price_el:
-                return None
+            # Τιμή
+            price_el = el.query_selector(
+                "[class*='price']:not([class*='old']):not([class*='was']):not([class*='regular'])"
+            )
+            if not price_el: return None
+            price_text = price_el.inner_text().replace("€","").replace(",",".").strip()
+            price = safe_float(''.join(c for c in price_text if c.isdigit() or c=='.'))
+            if price <= 0: return None
 
-            name  = name_el.inner_text().strip()
-            price = safe_float(price_el.inner_text().replace("€","").replace(",",".").strip())
-            if not name or price <= 0:
-                return None
-
-            was_el = el.query_selector(".price-old, .was-price, s")
-            was_price = None
-            is_offer  = False
+            # Παλιά τιμή
+            was_el = el.query_selector("[class*='old'], [class*='was'], [class*='regular'], s")
+            was = None
+            is_offer = False
             if was_el:
-                was_price = safe_float(was_el.inner_text().replace("€","").replace(",",".").strip())
-                is_offer  = was_price > price
+                was_text = was_el.inner_text().replace("€","").replace(",",".").strip()
+                was = safe_float(''.join(c for c in was_text if c.isdigit() or c=='.'))
+                is_offer = was > price if was else False
 
-            img_el = el.query_selector("img")
-            img = img_el.get_attribute("src") or "" if img_el else ""
-
+            # Image & URL
+            img_el  = el.query_selector("img")
+            img     = img_el.get_attribute("src") or "" if img_el else ""
             link_el = el.query_selector("a")
-            link = self.BASE + link_el.get_attribute("href") if link_el else page_url
+            link    = link_el.get_attribute("href") or "" if link_el else ""
+            if link and not link.startswith("http"):
+                link = self.BASE + link
+
+            # SKU από URL ή data attribute
+            sku = el.get_attribute("data-product-id") or el.get_attribute("data-id") or \
+                  (link.split("?")[-1] if "?" in link else link.split("/")[-1])
 
             return {
-                "chain":                "mymarket",
-                "chain_sku":            el.get_attribute("data-id") or name[:20],
-                "name":                 name,
-                "brand":                None,
-                "ean":                  None,
-                "category":             cat_key,
-                "emoji":                CATEGORY_EMOJI.get(cat_key, "📦"),
-                "unit":                 None,
-                "price":                price,
-                "price_per_unit":       None,
-                "is_offer":             is_offer,
-                "offer_original_price": was_price,
-                "image_url":            img,
-                "url":                  link,
-                "scraped_at":           today_iso(),
-                "history":              make_history(price),
+                "chain":"mymarket","chain_sku":sku[:50],
+                "name":name,"brand":None,"ean":None,
+                "category":cat_key,"emoji":EMOJI.get(cat_key,"📦"),
+                "unit":None,"price":price,"price_per_unit":None,
+                "is_offer":is_offer,
+                "offer_original_price":was if is_offer else None,
+                "image_url":img,"url":link,
+                "scraped_at":today(),"history":make_history(price),
             }
-        except Exception as e:
-            print(f"    [MyMarket] Element parse error: {e}")
-            return None
+        except: return None
 
 
 # ════════════════════════════════════════════════════════════════
 # MAIN
 # ════════════════════════════════════════════════════════════════
 def deduplicate(products):
-    """Αφαίρεση διπλότυπων βάσει chain+name."""
-    seen = set()
-    out = []
+    seen, out = set(), []
     for p in products:
         key = (p["chain"], p["name"].lower().strip())
         if key not in seen:
@@ -544,25 +432,22 @@ def deduplicate(products):
     return out
 
 def main():
-    print("=" * 60)
-    print(f"PriceWatch GR Scraper — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("=" * 60)
+    from datetime import datetime
+    print("="*60)
+    print(f"PriceWatch GR Scraper v3 — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print("="*60)
 
     OUTPUT_DIR.mkdir(exist_ok=True)
-
     all_products = []
 
     scrapers = [
         ("AB Vassilopoulos", ABScraper()),
-        ("Lidl GR",          LidlScraper()),
-        ("Sklavenitis",      SklavenitisScraperPW()),
-        ("My Market",        MyMarketScraperPW()),
+        ("Masoutis",         MasoutisScraper()),
+        ("My Market",        MyMarketScraper()),
     ]
 
     for name, scraper in scrapers:
-        print(f"\n{'─'*40}")
-        print(f"Scraping: {name}")
-        print(f"{'─'*40}")
+        print(f"\n{'─'*40}\nScraping: {name}\n{'─'*40}")
         try:
             products = scraper.scrape()
             all_products.extend(products)
@@ -570,13 +455,9 @@ def main():
         except Exception as e:
             print(f"✗ {name} FAILED: {e}")
 
-    # Deduplicate
     all_products = deduplicate(all_products)
+    all_products.sort(key=lambda p: p.get("name",""))
 
-    # Sort by name
-    all_products.sort(key=lambda p: p.get("name", ""))
-
-    # Save
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(all_products, f, ensure_ascii=False, indent=2)
 
