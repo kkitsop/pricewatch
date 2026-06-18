@@ -1,0 +1,53 @@
+name: Daily Price Scraper
+
+on:
+  schedule:
+    # Κάθε βράδυ 02:00 ώρα Ελλάδας (23:00 UTC)
+    - cron: '0 23 * * *'
+  workflow_dispatch:  # Χειροκίνητο trigger από GitHub UI
+
+jobs:
+  scrape-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests playwright
+          playwright install chromium --with-deps
+
+      - name: Run scraper
+        run: python scraper_gh.py
+        env:
+          SCRAPE_TIMEOUT: "20"
+
+      - name: Check output
+        run: |
+          if [ -f data/prices.json ]; then
+            COUNT=$(python -c "import json; d=json.load(open('data/prices.json')); print(len(d))")
+            echo "✓ Scraped $COUNT products"
+          else
+            echo "✗ prices.json not found"
+            exit 1
+          fi
+
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: '.'
+          production-branch: main
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Auto-deploy: price update $(date '+%Y-%m-%d %H:%M')"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
