@@ -31,5 +31,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: 'pricewatch-68f'  # Επιβεβαίωσε ότι αυτό είναι το όνομα του project στο Cloudflare Dashboard
+          projectName: 'pricewatch'  # Επιβεβαίωσε ότι αυτό είναι το όνομα του project στο Cloudflare Dashboard
           directory: '.'
