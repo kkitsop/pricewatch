@@ -2,17 +2,14 @@ name: Daily Price Scraper
 
 on:
   schedule:
-    # Κάθε βράδυ 02:00 ώρα Ελλάδας (23:00 UTC)
-    - cron: '0 23 * * *'
-  workflow_dispatch:  # Χειροκίνητο trigger από GitHub UI
+    - cron: '0 23 * * *'  # Κάθε βράδυ στις 02:00 ώρα Ελλάδας
+  workflow_dispatch:        # Επιτρέπει χειροκίνητη εκτέλεση
 
 jobs:
   scrape-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -22,32 +19,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests playwright
-          playwright install chromium --with-deps
+          python -m pip install --upgrade pip
+          pip install requests playwright beautifulsoup4
+          playwright install chromium
 
       - name: Run scraper
         run: python scraper_gh.py
-        env:
-          SCRAPE_TIMEOUT: "20"
 
-      - name: Check output
-        run: |
-          if [ -f data/prices.json ]; then
-            COUNT=$(python -c "import json; d=json.load(open('data/prices.json')); print(len(d))")
-            echo "✓ Scraped $COUNT products"
-          else
-            echo "✗ prices.json not found"
-            exit 1
-          fi
-
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v3
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
         with:
-          publish-dir: '.'
-          production-branch: main
-          production-deploy: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Auto-deploy: price update $(date '+%Y-%m-%d %H:%M')"
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'pricewatch-68f'  # Επιβεβαίωσε ότι αυτό είναι το όνομα του project στο Cloudflare Dashboard
+          directory: '.'
